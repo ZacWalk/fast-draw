@@ -1,0 +1,1141 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+// Generated Help ID header file
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include "resource.hm"
+#undef APSTUDIO_HIDDEN_SYMBOLS
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)\r\n"
+    "#ifdef _WIN32\r\n"
+    "LANGUAGE 9, 1\r\n"
+    "#pragma code_page(1252)\r\n"
+    "#endif //_WIN32\r\n"
+    "#include ""res\\JTDraw.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
+    "#include ""afxres.rc""         // Standard components\r\n"
+    "#include ""afxprint.rc""       // printing/print preview resources\r\n"
+    "#include ""afxolecl.rc""       // OLE container resources\r\n"
+    "#include ""afxolesv.rc""       // OLE server resources\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON    DISCARDABLE     "res\\ico00002.ico"
+IDR_JTDRAWTYPE          ICON    DISCARDABLE     "res\\JTDrawDoc.ico"
+IDR_JTDRAW              ICON    DISCARDABLE     "res\\icon1.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_JTDRAWTYPE_CNTR_IP MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Close",                      ID_FILE_CLOSE
+        MENUITEM "&Save\tCtrl+S",               ID_FILE_SAVE
+        MENUITEM "Save &As...",                 ID_FILE_SAVE_AS
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...\tCtrl+P",           ID_FILE_PRINT
+        MENUITEM "Print Pre&view",              ID_FILE_PRINT_PREVIEW
+        MENUITEM "P&rint Setup...",             ID_FILE_PRINT_SETUP
+        MENUITEM SEPARATOR
+        MENUITEM "Recent File",                 ID_FILE_MRU_FILE1, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    MENUITEM SEPARATOR
+    MENUITEM SEPARATOR
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&New Window",                 ID_WINDOW_NEW
+        MENUITEM "&Cascade",                    ID_WINDOW_CASCADE
+        MENUITEM "&Tile",                       ID_WINDOW_TILE_HORZ
+        MENUITEM "&Arrange Icons",              ID_WINDOW_ARRANGE
+    END
+END
+
+IDR_JTDRAWTYPE_SRVR_EMB MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Close",                      ID_FILE_CLOSE
+        MENUITEM "&Update\tCtrl+S",             ID_FILE_UPDATE
+        MENUITEM "Save Copy &As...",            ID_FILE_SAVE_COPY_AS
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...\tCtrl+P",           ID_FILE_PRINT
+        MENUITEM "Print Pre&view",              ID_FILE_PRINT_PREVIEW
+        MENUITEM "P&rint Setup...",             ID_FILE_PRINT_SETUP
+        MENUITEM SEPARATOR
+        MENUITEM "Recent File",                 ID_FILE_MRU_FILE1, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Paste\tCtrl+V",              ID_EDIT_PASTE
+        MENUITEM "Paste &Special...",           ID_EDIT_PASTE_SPECIAL
+        MENUITEM SEPARATOR
+        MENUITEM "Insert &New Object...",       ID_OLE_INSERT_NEW
+        MENUITEM "Lin&ks...",                   ID_OLE_EDIT_LINKS
+        MENUITEM "<<OLE VERBS GO HERE>>",       ID_OLE_VERB_FIRST
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Toolbar",                    ID_VIEW_TOOLBAR
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&New Window",                 ID_WINDOW_NEW
+        MENUITEM "&Cascade",                    ID_WINDOW_CASCADE
+        MENUITEM "&Tile",                       ID_WINDOW_TILE_HORZ
+        MENUITEM "&Arrange Icons",              ID_WINDOW_ARRANGE
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About JTDraw...",            ID_APP_ABOUT
+    END
+END
+
+IDR_JTDRAWTYPE_SRVR_IP MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Undo\tCtrl+Z",               ID_EDIT_UNDO
+        MENUITEM SEPARATOR
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Paste\tCtrl+V",              ID_EDIT_PASTE
+        MENUITEM "Paste &Special...",           ID_EDIT_PASTE_SPECIAL
+        MENUITEM SEPARATOR
+        MENUITEM "Insert &New Object...",       ID_OLE_INSERT_NEW
+        MENUITEM "Lin&ks...",                   ID_OLE_EDIT_LINKS
+        MENUITEM "<<OLE VERBS GO HERE>>",       ID_OLE_VERB_FIRST
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Toolbar",                    ID_VIEW_TOOLBAR
+    END
+    MENUITEM SEPARATOR
+    MENUITEM SEPARATOR
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About JTDraw...",            ID_APP_ABOUT
+    END
+END
+
+ID_POPUP_MENU MENU DISCARDABLE 
+BEGIN
+    POPUP ""
+    BEGIN
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Delete\tDel",                ID_EDIT_CLEAR
+        MENUITEM "Proper&ties...\tAlt+Enter",   ID_EDIT_PROPERTIES
+        MENUITEM SEPARATOR
+        MENUITEM "&Edit Object",                ID_OLE_VERB_FIRST
+    END
+END
+
+IDR_DRAWCLTYPE_CNTR_IP MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Close",                      ID_FILE_CLOSE
+        MENUITEM "&Save\tCtrl+S",               ID_FILE_SAVE
+        MENUITEM "Save &As...",                 ID_FILE_SAVE_AS
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...\tCtrl+P",           ID_FILE_PRINT
+        MENUITEM "Print Pre&view",              ID_FILE_PRINT_PREVIEW
+        MENUITEM "P&rint Setup...",             ID_FILE_PRINT_SETUP
+        MENUITEM SEPARATOR
+        MENUITEM "Sen&d...",                    ID_FILE_SEND_MAIL
+        MENUITEM SEPARATOR
+        MENUITEM "Recent File",                 ID_FILE_MRU_FILE1, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    MENUITEM SEPARATOR
+    MENUITEM SEPARATOR
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&New Window",                 ID_WINDOW_NEW
+        MENUITEM "&Cascade",                    ID_WINDOW_CASCADE
+        MENUITEM "&Tile",                       ID_WINDOW_TILE_HORZ
+        MENUITEM "&Arrange Icons",              ID_WINDOW_ARRANGE
+    END
+END
+
+IDR_MAINFRAME MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM SEPARATOR
+        MENUITEM "P&rint Setup...",             ID_FILE_PRINT_SETUP
+        MENUITEM SEPARATOR
+        MENUITEM "Recent File",                 ID_FILE_MRU_FILE1, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    POPUP "&View"
+    BEGIN
+        POPUP "&Toolbars"
+        BEGIN
+            MENUITEM "",                            ID_VIEW_TOOLBARS
+        END
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About JTDraw...",            ID_APP_ABOUT
+    END
+END
+
+IDR_JTDRAW MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Close",                      ID_FILE_CLOSE
+        MENUITEM "&Save\tCtrl+S",               ID_FILE_SAVE
+        MENUITEM "Save &As...",                 ID_FILE_SAVE_AS
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...\tCtrl+P",           ID_FILE_PRINT
+        MENUITEM "Print Pre&view",              ID_FILE_PRINT_PREVIEW
+        MENUITEM "P&rint Setup...",             ID_FILE_PRINT_SETUP
+        MENUITEM SEPARATOR
+        MENUITEM "Sen&d...",                    ID_FILE_SEND_MAIL
+        MENUITEM "Summary &Info...",            ID_FILE_SUMMARYINFO
+        MENUITEM SEPARATOR
+        MENUITEM "Recent File",                 ID_FILE_MRU_FILE1, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Paste\tCtrl+V",              ID_EDIT_PASTE
+        MENUITEM "&Delete\tDel",                ID_EDIT_CLEAR
+        MENUITEM "&Select",                     ID_DRAW_SELECT
+        MENUITEM "Select &All\tCtrl+A",         ID_EDIT_SELECT_ALL
+        MENUITEM "Proper&ties...\tAlt+Enter",   ID_EDIT_PROPERTIES
+        MENUITEM SEPARATOR
+        MENUITEM "Insert &New Object...",       ID_OLE_INSERT_NEW
+        MENUITEM "Lin&ks...",                   ID_OLE_EDIT_LINKS
+        MENUITEM "&Edit Object",                ID_OLE_VERB_FIRST
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Grid Lines\tG",              ID_VIEW_GRID
+        MENUITEM "&Paper Color...",             ID_VIEW_PAPERCOLOR
+        MENUITEM "Show &Objects Border",        ID_VIEW_SHOWOBJECTS
+        MENUITEM SEPARATOR
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+        POPUP "&Toolbars"
+        BEGIN
+            MENUITEM "",                            ID_VIEW_TOOLBARS
+        END
+    END
+    POPUP "&Draw"
+    BEGIN
+        MENUITEM SEPARATOR
+        MENUITEM "&Line",                       ID_DRAW_LINE
+        MENUITEM "&Rectangle",                  ID_DRAW_RECT
+        MENUITEM "R&ound Rectangle",            ID_DRAW_ROUNDRECT
+        MENUITEM "&Ellipse",                    ID_DRAW_ELLIPSE
+        MENUITEM "&Polygon",                    ID_DRAW_POLYGON
+        MENUITEM "&Arrow",                      ID_DRAW_ARROW
+        MENUITEM "&Text",                       ID_DRAW_TEXT
+    END
+    POPUP "&Object"
+    BEGIN
+        MENUITEM SEPARATOR
+        MENUITEM "Move To Front\tCtrl+Plus",    ID_OBJECT_MOVETOFRONT
+        MENUITEM "Move To Back\tCtrl+Minus",    ID_OBJECT_MOVETOBACK
+        MENUITEM "Move Forward\tPlus",          ID_OBJECT_MOVEFORWARD
+        MENUITEM "Move Back\tMinus",            ID_OBJECT_MOVEBACK
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&New Window",                 ID_WINDOW_NEW
+        MENUITEM "&Cascade",                    ID_WINDOW_CASCADE
+        MENUITEM "&Tile",                       ID_WINDOW_TILE_HORZ
+        MENUITEM "&Arrange Icons",              ID_WINDOW_ARRANGE
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Help Topics",                ID_HELP_FINDER
+        MENUITEM SEPARATOR
+        MENUITEM "&About JTDraw...",            ID_APP_ABOUT
+    END
+END
+
+IDR_POPUP_TOOLBAR MENU DISCARDABLE 
+BEGIN
+    POPUP "DUMMY"
+    BEGIN
+        MENUITEM "&Standard",                   ID_VIEW_TOOLBAR
+        MENUITEM "&Network",                    ID_VIEW_BUILD_TOOLBAR
+        MENUITEM "&Format",                     ID_VIEW_FORMAT_TOOLBAR
+        MENUITEM SEPARATOR
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR1
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR2
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR3
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR4
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR5
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR6
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR7
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR8
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR9
+        MENUITEM "<User Toolbar>",              ID_VIEW_USER_TOOLBAR10
+        MENUITEM SEPARATOR
+        MENUITEM "&Customize...",               ID_VIEW_CUSTOMIZE
+    END
+END
+
+IDR_UNDO MENU DISCARDABLE 
+BEGIN
+    POPUP "DUMMY"
+    BEGIN
+        MENUITEM "<dummy>",                     ID_EDIT_UNDO_DUMMY
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDR_JTDRAWTYPE_CNTR_IP ACCELERATORS PRELOAD MOVEABLE PURE 
+BEGIN
+    "N",            ID_FILE_NEW,            VIRTKEY, CONTROL
+    "O",            ID_FILE_OPEN,           VIRTKEY, CONTROL
+    "S",            ID_FILE_SAVE,           VIRTKEY, CONTROL
+    "P",            ID_FILE_PRINT,          VIRTKEY, CONTROL
+    VK_F6,          ID_NEXT_PANE,           VIRTKEY 
+    VK_F6,          ID_PREV_PANE,           VIRTKEY, SHIFT
+    VK_ESCAPE,      ID_CANCEL_EDIT_CNTR,    VIRTKEY, NOINVERT
+END
+
+IDR_JTDRAWTYPE_SRVR_IP ACCELERATORS PRELOAD MOVEABLE PURE 
+BEGIN
+    "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL
+    "X",            ID_EDIT_CUT,            VIRTKEY, CONTROL
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL
+    "V",            ID_EDIT_PASTE,          VIRTKEY, CONTROL
+    VK_BACK,        ID_EDIT_UNDO,           VIRTKEY, ALT
+    VK_DELETE,      ID_EDIT_CUT,            VIRTKEY, SHIFT
+    VK_INSERT,      ID_EDIT_COPY,           VIRTKEY, CONTROL
+    VK_INSERT,      ID_EDIT_PASTE,          VIRTKEY, SHIFT
+    VK_ESCAPE,      ID_CANCEL_EDIT_SRVR,    VIRTKEY, NOINVERT
+END
+
+IDR_JTDRAWTYPE_SRVR_EMB ACCELERATORS PRELOAD MOVEABLE PURE 
+BEGIN
+    "N",            ID_FILE_NEW,            VIRTKEY, CONTROL
+    "O",            ID_FILE_OPEN,           VIRTKEY, CONTROL
+    "S",            ID_FILE_UPDATE,         VIRTKEY, CONTROL
+    "P",            ID_FILE_PRINT,          VIRTKEY, CONTROL
+    "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL
+    "X",            ID_EDIT_CUT,            VIRTKEY, CONTROL
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL
+    "V",            ID_EDIT_PASTE,          VIRTKEY, CONTROL
+    VK_BACK,        ID_EDIT_UNDO,           VIRTKEY, ALT
+    VK_DELETE,      ID_EDIT_CUT,            VIRTKEY, SHIFT
+    VK_INSERT,      ID_EDIT_COPY,           VIRTKEY, CONTROL
+    VK_INSERT,      ID_EDIT_PASTE,          VIRTKEY, SHIFT
+    VK_F6,          ID_NEXT_PANE,           VIRTKEY 
+    VK_F6,          ID_PREV_PANE,           VIRTKEY, SHIFT
+    VK_ESCAPE,      ID_CANCEL_EDIT_CNTR,    VIRTKEY, NOINVERT
+END
+
+IDR_JTDRAW ACCELERATORS PRELOAD MOVEABLE PURE 
+BEGIN
+    "+",            ID_OBJECT_MOVETOFRONT,  ASCII,  NOINVERT
+    "-",            ID_OBJECT_MOVEBACK,     ASCII,  NOINVERT
+    "=",            ID_OBJECT_MOVEFORWARD,  ASCII,  NOINVERT
+    "A",            ID_EDIT_SELECT_ALL,     VIRTKEY, CONTROL, NOINVERT
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL, NOINVERT
+    "E",            ID_DRAW_ELLIPSE,        ASCII,  NOINVERT
+    "G",            ID_VIEW_GRID,           ASCII,  NOINVERT
+    "L",            ID_DRAW_LINE,           ASCII,  NOINVERT
+    "N",            ID_DRAW_ROUNDRECT,      ASCII,  NOINVERT
+    "N",            ID_FILE_NEW,            VIRTKEY, CONTROL, NOINVERT
+    "O",            ID_FILE_OPEN,           VIRTKEY, CONTROL, NOINVERT
+    "P",            ID_FILE_PRINT,          VIRTKEY, CONTROL, NOINVERT
+    "R",            ID_DRAW_RECT,           ASCII,  NOINVERT
+    "S",            ID_DRAW_SELECT,         ASCII,  NOINVERT
+    "S",            ID_FILE_SAVE,           VIRTKEY, CONTROL, NOINVERT
+    "V",            ID_EDIT_PASTE,          VIRTKEY, CONTROL, NOINVERT
+    VK_ADD,         ID_OBJECT_MOVEFORWARD,  VIRTKEY, NOINVERT
+    VK_ADD,         ID_OBJECT_MOVETOFRONT,  VIRTKEY, CONTROL, NOINVERT
+    VK_BACK,        ID_EDIT_UNDO,           VIRTKEY, ALT, NOINVERT
+    VK_DELETE,      ID_EDIT_CLEAR,          VIRTKEY, NOINVERT
+    VK_DELETE,      ID_EDIT_CUT,            VIRTKEY, SHIFT, NOINVERT
+    VK_ESCAPE,      ID_CANCEL_EDIT,         VIRTKEY, NOINVERT
+    VK_F6,          ID_NEXT_PANE,           VIRTKEY, NOINVERT
+    VK_F6,          ID_PREV_PANE,           VIRTKEY, SHIFT, NOINVERT
+    VK_INSERT,      ID_EDIT_COPY,           VIRTKEY, CONTROL, NOINVERT
+    VK_INSERT,      ID_EDIT_PASTE,          VIRTKEY, SHIFT, NOINVERT
+    VK_RETURN,      ID_EDIT_PROPERTIES,     VIRTKEY, ALT, NOINVERT
+    VK_SUBTRACT,    ID_OBJECT_MOVEBACK,     VIRTKEY, NOINVERT
+    VK_SUBTRACT,    ID_OBJECT_MOVETOBACK,   VIRTKEY, CONTROL, NOINVERT
+    "X",            ID_EDIT_CUT,            VIRTKEY, CONTROL, NOINVERT
+    "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL, NOINVERT
+    "_",            ID_OBJECT_MOVETOBACK,   ASCII,  NOINVERT
+    "e",            ID_DRAW_ELLIPSE,        ASCII,  NOINVERT
+    "g",            ID_VIEW_GRID,           ASCII,  NOINVERT
+    "l",            ID_DRAW_LINE,           ASCII,  NOINVERT
+    "n",            ID_DRAW_ROUNDRECT,      ASCII,  NOINVERT
+    "r",            ID_DRAW_RECT,           ASCII,  NOINVERT
+    "s",            ID_DRAW_SELECT,         ASCII,  NOINVERT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_LINE DIALOG DISCARDABLE  0, 0, 255, 157
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION
+CAPTION "Line / Border"
+FONT 10, "System"
+BEGIN
+    PUSHBUTTON      "",IDC_LINE_COLOR,60,18,48,12
+    PUSHBUTTON      "",IDC_LINEPICKER,176,18,51,12
+    EDITTEXT        IDC_LINE_SIZE,60,35,48,12,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "Spin1",IDC_SPIN1,"msctls_updown32",UDS_SETBUDDYINT | 
+                    UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | 
+                    UDS_NOTHOUSANDS,109,35,8,10
+    CONTROL         "Round Pen",IDC_ROUND_PEN,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,176,38,59,10
+    PUSHBUTTON      "",IDC_FILL_COLOR,60,62,48,12
+    CONTROL         "&Transparent",IDC_FILL,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,176,62,60,12
+    PUSHBUTTON      "",IDC_ARROW_START,60,93,48,12
+    PUSHBUTTON      "",IDC_ARROW_END,176,93,51,12
+    EDITTEXT        IDC_ARROW_START_SIZE,60,109,48,12,ES_AUTOHSCROLL
+    CONTROL         "Spin2",IDC_SPIN2,"msctls_updown32",UDS_SETBUDDYINT | 
+                    UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | 
+                    UDS_NOTHOUSANDS,108,110,8,10
+    EDITTEXT        IDC_ARROW_END_SIZE,176,109,51,12,ES_AUTOHSCROLL
+    CONTROL         "Spin3",IDC_SPIN3,"msctls_updown32",UDS_SETBUDDYINT | 
+                    UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | 
+                    UDS_NOTHOUSANDS,226,110,8,10
+    CONTROL         "Default for new object",IDC_SET_DEFAULT,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,11,128,86,9
+    LTEXT           "Style:",IDC_STATIC,150,19,20,8
+    LTEXT           "Color:",IDC_STATIC,19,19,21,8
+    LTEXT           "Size:",IDC_STATIC,19,36,18,8
+    LTEXT           "Color:",IDC_STATIC,14,62,21,8
+    LTEXT           "Fill",IDC_STATIC,9,51,11,8
+    LTEXT           "Line",IDC_STATIC,10,8,15,8
+    LTEXT           "Arrow ",IDC_STATIC,8,79,21,8,WS_DISABLED
+    LTEXT           "End Style:",IDC_STATIC,137,94,34,11
+    LTEXT           "Begin Style:",IDC_STATIC,12,94,41,11
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,21,54,222,1
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,29,12,215,1
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,33,83,211,1
+    LTEXT           "Begin Size:",IDC_STATIC,12,110,39,10
+    LTEXT           "End Size:",IDC_STATIC,136,110,32,10
+END
+
+IDD_NODE DIALOG DISCARDABLE  0, 0, 257, 159
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION
+CAPTION "Node"
+FONT 10, "System"
+BEGIN
+    COMBOBOX        IDC_COMBO_CAPTION,42,9,77,12,CBS_DROPDOWN | CBS_SORT | 
+                    WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Caption Not Shown",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,131,10,75,9
+    PUSHBUTTON      "DB",IDC_BUTTON1,214,9,35,12
+    COMBOBOX        IDC_BORDER,42,28,77,51,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    COMBOBOX        IDC_TEXT_ALLIGNMENT2,42,49,77,50,CBS_DROPDOWNLIST | 
+                    CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "Font",IDC_FONT,133,28,37,11
+    COMBOBOX        IDC_COMBO2,44,86,77,12,CBS_DROPDOWN | CBS_SORT | 
+                    WS_VSCROLL | WS_TABSTOP
+    EDITTEXT        IDC_LINE_SIZE,156,86,91,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_EDIT1,3,114,253,41,ES_AUTOHSCROLL
+    LTEXT           "Formulus:",IDC_STATIC,8,87,33,8
+    LTEXT           "MW:",IDC_STATIC,133,88,19,8
+    LTEXT           "Caption:",IDC_STATIC,7,10,33,8
+    LTEXT           "Note:",IDC_STATIC,6,101,29,8
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,6,79,244,1
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,30,105,222,1
+    LTEXT           "Alignment:",IDC_STATIC,7,50,35,12
+    LTEXT           "Border:",IDC_STATIC,7,29,27,8
+    GROUPBOX        "Sample",IDC_STATIC,133,44,116,31
+END
+
+IDD_PROP_RECT DIALOG DISCARDABLE  0, 0, 187, 105
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION
+CAPTION "General"
+FONT 10, "System"
+BEGIN
+    GROUPBOX        "Outline",IDC_STATIC,13,7,77,32
+    LTEXT           "Weight",IDC_STATIC,20,18,26,11
+    EDITTEXT        IDC_WEIGHT,47,17,27,12,ES_AUTOHSCROLL
+    CONTROL         "Spin1",IDC_SPIN1,"msctls_updown32",UDS_SETBUDDYINT | 
+                    UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS,76,17,8,
+                    12
+    GROUPBOX        "Fill",IDC_STATIC,15,45,75,26
+    CONTROL         "None",IDC_NOFILL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,
+                    20,55,47,10
+END
+
+IDD_REACTION1 DIALOG DISCARDABLE  0, 0, 257, 159
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION
+CAPTION "Reaction"
+FONT 10, "System"
+BEGIN
+    LTEXT           "All substrates",IDC_STATIC,15,8,81,8
+    LTEXT           "Reactant:",IDC_STATIC,137,9,65,8
+    LISTBOX         IDC_LIST1,14,20,95,114,LBS_SORT | LBS_NOINTEGRALHEIGHT | 
+                    WS_VSCROLL | WS_TABSTOP
+    LISTBOX         IDC_LIST2,138,18,104,50,LBS_SORT | LBS_NOINTEGRALHEIGHT | 
+                    WS_VSCROLL | WS_TABSTOP
+    LISTBOX         IDC_LIST3,138,86,104,49,LBS_SORT | LBS_NOINTEGRALHEIGHT | 
+                    WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Products:",IDC_STATIC,139,73,65,8
+    PUSHBUTTON      "",IDC_BA_REACTANT,112,24,22,16
+    PUSHBUTTON      "",IDC_BR_REACTANT,112,42,22,16
+    PUSHBUTTON      "",IDC_BA_PRODUCT,112,94,22,16
+    PUSHBUTTON      "",IDC_BR_PRODUCT,112,113,22,16
+    PUSHBUTTON      "DataBase",IDC_DB1,14,141,49,15
+END
+
+IDD_REACTION2 DIALOG DISCARDABLE  0, 0, 256, 158
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION
+CAPTION "Reaction More"
+FONT 10, "System"
+BEGIN
+    LTEXT           "STOICHEM:",IDC_STATIC,13,10,84,8
+    LTEXT           "Rate Function:",IDC_STATIC,13,59,84,8
+    LTEXT           "Symbol of Variables:",IDC_STATIC,16,119,78,9
+    COMBOBOX        IDC_COMBO1,94,117,91,12,CBS_DROPDOWN | CBS_SORT | 
+                    WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Symbol of Constant:",IDC_STATIC,16,135,78,9
+    COMBOBOX        IDC_COMBO4,94,133,91,12,CBS_DROPDOWN | CBS_SORT | 
+                    WS_VSCROLL | WS_TABSTOP
+END
+
+IDD_REGULATION DIALOG DISCARDABLE  0, 0, 258, 155
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION
+CAPTION "Regulation"
+FONT 10, "System"
+BEGIN
+    LTEXT           "Caption:",IDC_STATIC,9,14,29,9
+    CONTROL         "Caption Not Shown",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,141,14,85,9
+    EDITTEXT        IDC_EDIT1,45,13,73,12,ES_AUTOHSCROLL
+    GROUPBOX        "Effect",IDC_STATIC,11,31,93,36
+    GROUPBOX        "Mechanism",IDC_STATIC,131,31,111,36
+    CONTROL         "Inhibition",IDC_RADIO1,"Button",BS_AUTORADIOBUTTON,24,
+                    44,58,8
+    CONTROL         "Promotion",IDC_RADIO2,"Button",BS_AUTORADIOBUTTON,24,56,
+                    58,8
+    CONTROL         "by Enzyme Concentration",IDC_CHECK2,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,142,55,94,8
+    CONTROL         "by Enzyme Activity",IDC_CHECK3,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,142,43,84,8
+    EDITTEXT        IDC_EDIT2,12,84,233,64,ES_AUTOHSCROLL
+    LTEXT           "Note:",IDC_STATIC,11,72,60,9
+END
+
+IDD_STAT_PAGE DIALOG DISCARDABLE  0, 0, 190, 150
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION | 
+    WS_SYSMENU
+CAPTION "Statistics"
+FONT 10, "System"
+BEGIN
+    LTEXT           "Last Saved By",IDC_STATIC,15,15,52,8
+    LTEXT           "Total Editing Time",IDC_STATIC,16,41,52,8
+    LTEXT           "Revision number:",IDC_STATIC,16,28,52,8
+    LTEXT           "Last Printed:",IDC_STATIC,16,54,52,8
+    LTEXT           "Created:",IDC_STATIC,16,67,52,8
+    LTEXT           "# Pages:",IDC_STATIC,17,93,52,8
+    LTEXT           "# words:",IDC_STATIC,16,106,52,8
+    LTEXT           "# chars:",IDC_STATIC,16,119,52,8
+    LTEXT           "Security Level:",IDC_STATIC,16,132,52,8
+    LTEXT           "Static",IDC_SAVEDBY,94,15,83,9
+    LTEXT           "Static",IDC_EDITTIME,94,41,83,9
+    LTEXT           "Static",IDC_LASTPRINT,94,54,83,9
+    LTEXT           "Static",IDC_NUMPAGES,94,93,83,9
+    LTEXT           "Static",IDC_CREATEDATE,94,68,83,9
+    LTEXT           "Static",IDC_NUMWORDS,94,106,83,9
+    LTEXT           "Static",IDC_NUMCHARS,94,119,83,9
+    LTEXT           "Static",IDC_SECURITY,94,132,83,9
+    LTEXT           "Static",IDC_REVNUM,94,28,83,9
+    LTEXT           "Last Saved:",IDC_STATIC,17,80,52,8
+    LTEXT           "Static",IDC_LASTSAVE,94,80,83,9
+END
+
+IDD_SUMM_PAGE DIALOGEX 0, 0, 162, 156
+STYLE WS_CHILD | WS_CAPTION | WS_SYSMENU
+CAPTION "Summary"
+FONT 10, "System", 0, 0, 0x1
+BEGIN
+    LTEXT           "Application:",IDC_STATIC,7,12,45,8
+    LTEXT           "Static",IDC_APPNAME,60,11,26,8
+    LTEXT           "Author:",IDC_STATIC,8,24,20,9
+    LTEXT           "Keywords:",IDC_STATIC,8,37,31,10
+    LTEXT           "Comments",IDC_STATIC,8,51,31,10
+    LTEXT           "Subjects:",IDC_STATIC,10,124,31,10
+    LTEXT           "Title:",IDC_STATIC,9,111,31,10
+    LTEXT           "Template:",IDC_STATIC,8,137,31,10
+    EDITTEXT        IDC_AUTHOR,60,22,92,12,ES_AUTOHSCROLL
+    EDITTEXT        IDC_KEYWORDS,60,36,92,12,ES_AUTOHSCROLL,0,HIDC_KEYWORDS
+    EDITTEXT        IDC_COMMENTS,60,51,92,49,ES_MULTILINE | WS_VSCROLL
+    EDITTEXT        IDC_TITLE,60,111,92,12,ES_AUTOHSCROLL
+    EDITTEXT        IDC_SUBJECT,60,124,92,12,ES_AUTOHSCROLL
+    EDITTEXT        IDC_TEMPLATE,60,137,92,12,ES_AUTOHSCROLL
+END
+
+IDD_TEXT DIALOG DISCARDABLE  0, 0, 255, 163
+STYLE DS_CONTEXTHELP | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CAPTION
+CAPTION "Text"
+FONT 10, "System"
+BEGIN
+    EDITTEXT        IDC_TEXT_INPUT,2,68,252,90,ES_AUTOHSCROLL
+    COMBOBOX        IDC_TEXT_ALLIGNMENT,176,48,62,50,CBS_DROPDOWNLIST | 
+                    CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,11,41,231,1
+    LTEXT           "Alignment:",IDC_STATIC,137,48,35,12
+    LTEXT           "Border",IDC_STATIC,17,48,23,8
+    COMBOBOX        IDC_BORDER,50,48,67,51,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    PUSHBUTTON      "Font",IDC_FONT,15,12,39,18
+    GROUPBOX        "Sample",IDC_STATIC,71,6,170,31
+END
+
+IDD_ABOUTBOX DIALOGEX 0, 0, 266, 198
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About JTDraw"
+FONT 8, "MS Sans Serif"
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,11,17,20,20
+    LTEXT           "JTDraw Version 1.0",IDC_VERSION,40,10,119,8,SS_NOPREFIX
+    LTEXT           "Copyright (C) 1999 by Jian Zhu, Tao Zhu",IDC_STATIC,40,
+                    25,147,8
+    DEFPUSHBUTTON   "OK",IDOK,177,162,58,14,WS_GROUP
+    GROUPBOX        "Thanks very much to",IDC_STATIC,38,45,203,99,0,
+                    WS_EX_CLIENTEDGE | WS_EX_STATICEDGE
+    LTEXT           "Please visit Tao Scientific Homepage",IDC_WWW,28,155,
+                    136,10
+    LTEXT           "Comment : tazst6@pitt.edu",IDC_EMAIL,28,165,142,9
+    LISTBOX         IDC_FRIENDS,41,56,196,84,LBS_NOINTEGRALHEIGHT | 
+                    WS_VSCROLL | WS_TABSTOP
+END
+
+IDD_COLOURPICKDEMO_DIALOG DIALOGEX 0, 0, 174, 106
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "ColourPickDemo"
+FONT 8, "MS Sans Serif", 0, 0, 0x1
+BEGIN
+    PUSHBUTTON      "Quit",IDCANCEL,117,7,50,14
+    DEFPUSHBUTTON   "Test",IDC_COLOURPICKER,7,7,53,15
+    CONTROL         "Edit &Text colour",IDC_MODE1,"Button",
+                    BS_AUTORADIOBUTTON | WS_GROUP,7,35,65,10
+    CONTROL         "Edit &Background colour",IDC_MODE2,"Button",
+                    BS_AUTORADIOBUTTON,77,35,90,10
+    CONTROL         "T&rack colour",IDC_TRACK,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,7,51,56,10
+    CONTROL         "&Disable",IDC_DISABLE,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,77,51,60,9
+    EDITTEXT        IDC_DEFAULT_EDIT,60,71,70,13,ES_AUTOHSCROLL
+    RTEXT           """Default"" Text",IDC_STATIC,7,73,48,10
+    EDITTEXT        IDC_CUSTOM_EDIT,60,86,70,13,ES_AUTOHSCROLL
+    RTEXT           """Custom"" Text",IDC_STATIC,8,88,47,10
+END
+
+
+#ifndef _MAC
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "Comments", "\0"
+            VALUE "CompanyName", "\0"
+            VALUE "FileDescription", "JTDraw MFC Application\0"
+            VALUE "FileVersion", "1, 0, 0, 1\0"
+            VALUE "InternalName", "JTDraw\0"
+            VALUE "LegalCopyright", "Copyright (C) 1999\0"
+            VALUE "LegalTrademarks", "\0"
+            VALUE "OriginalFilename", "JTDraw.EXE\0"
+            VALUE "PrivateBuild", "\0"
+            VALUE "ProductName", "JTDraw Application\0"
+            VALUE "ProductVersion", "1, 0, 0, 1\0"
+            VALUE "SpecialBuild", "\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+#endif    // !_MAC
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDR_JTDRAWTYPE_SRVR_IP  BITMAP  MOVEABLE PURE   "res\\IToolbar.bmp"
+IDR_JTDRAW              BITMAP  DISCARDABLE     "res\\toolbar1.bmp"
+IDB_CLASS_VIEW          BITMAP  DISCARDABLE     "res\\classview.bmp"
+IDB_FILE_VIEW           BITMAP  DISCARDABLE     "res\\fileview.bmp"
+IDB_RESOURCE_VIEW       BITMAP  DISCARDABLE     "res\\resource.bmp"
+IDR_MAINFRAME           BITMAP  MOVEABLE PURE   "res\\Toolbar.bmp"
+IDR_FORMAT_TOOLBAR      BITMAP  DISCARDABLE     "res\\format_t.bmp"
+IDB_ARROWS              BITMAP  DISCARDABLE     "res\\bitmap1.bmp"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Toolbar
+//
+
+IDR_JTDRAWTYPE_SRVR_IP TOOLBAR DISCARDABLE  16, 16
+BEGIN
+    BUTTON      ID_EDIT_CUT
+    BUTTON      ID_EDIT_COPY
+    BUTTON      ID_EDIT_PASTE
+    SEPARATOR
+    BUTTON      ID_APP_ABOUT
+END
+
+IDR_JTDRAW TOOLBAR DISCARDABLE  16, 16
+BEGIN
+    BUTTON      ID_DRAW_SELECT
+    BUTTON      ID_DRAW_RECT
+    BUTTON      ID_DRAW_ROUNDRECT
+    BUTTON      ID_DRAW_ELLIPSE
+    BUTTON      ID_DRAW_LINE
+    BUTTON      ID_DRAW_ARROW
+    BUTTON      ID_DRAW_POLYGON
+    BUTTON      ID_DRAW_TEXT
+END
+
+IDR_MAINFRAME TOOLBAR DISCARDABLE  16, 16
+BEGIN
+    BUTTON      ID_FILE_NEW
+    BUTTON      ID_FILE_OPEN
+    BUTTON      ID_FILE_SAVE
+    SEPARATOR
+    BUTTON      ID_EDIT_CUT
+    BUTTON      ID_EDIT_COPY
+    BUTTON      ID_EDIT_PASTE
+    SEPARATOR
+    BUTTON      ID_FILE_PRINT
+    BUTTON      ID_FILE_PRINT_PREVIEW
+    SEPARATOR
+    BUTTON      ID_APP_ABOUT
+END
+
+IDR_FORMAT_TOOLBAR TOOLBAR DISCARDABLE  16, 16
+BEGIN
+    BUTTON      ID_OBJECT_MOVETOFRONT
+    BUTTON      ID_OBJECT_MOVETOBACK
+    BUTTON      ID_OBJECT_MOVEFORWARD
+    BUTTON      ID_OBJECT_MOVEBACK
+    SEPARATOR
+    BUTTON      ID_CHAR_COLOR
+    BUTTON      ID_LINE_COLOR
+    BUTTON      ID_FILL_COLOR
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Cursor
+//
+
+IDC_PENCIL              CURSOR  DISCARDABLE     "res\\Pencil.cur"
+IDC_HAND                CURSOR  DISCARDABLE     "res\\hand.cur"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_LINE, DIALOG
+    BEGIN
+        RIGHTMARGIN, 252
+    END
+
+    IDD_TEXT, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 158
+    END
+
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        RIGHTMARGIN, 255
+        TOPMARGIN, 10
+    END
+
+    IDD_COLOURPICKDEMO_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 167
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 99
+        HORZGUIDE, 21
+        HORZGUIDE, 35
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog Info
+//
+
+IDD_TEXT DLGINIT
+BEGIN
+    IDC_TEXT_ALLIGNMENT, 0x403, 5, 0
+0x654c, 0x7466, "\000" 
+    IDC_TEXT_ALLIGNMENT, 0x403, 7, 0
+0x6543, 0x746e, 0x7265, "\000" 
+    IDC_TEXT_ALLIGNMENT, 0x403, 6, 0
+0x6952, 0x6867, 0x0074, 
+    IDC_BORDER, 0x403, 10, 0
+0x6552, 0x7463, 0x6e61, 0x6c67, 0x0065, 
+    IDC_BORDER, 0x403, 16, 0
+0x6f52, 0x6e75, 0x2064, 0x6552, 0x7463, 0x6e61, 0x6c67, 0x0065, 
+    IDC_BORDER, 0x403, 8, 0
+0x6c45, 0x696c, 0x7370, 0x0065, 
+    IDC_BORDER, 0x403, 5, 0
+0x6f4e, 0x656e, "\000" 
+    0
+END
+
+IDD_NODE DLGINIT
+BEGIN
+    IDC_BORDER, 0x403, 10, 0
+0x6552, 0x7463, 0x6e61, 0x6c67, 0x0065, 
+    IDC_BORDER, 0x403, 16, 0
+0x6f52, 0x6e75, 0x2064, 0x6552, 0x7463, 0x6e61, 0x6c67, 0x0065, 
+    IDC_BORDER, 0x403, 8, 0
+0x6c45, 0x696c, 0x7370, 0x0065, 
+    IDC_BORDER, 0x403, 5, 0
+0x6f4e, 0x656e, "\000" 
+    IDC_TEXT_ALLIGNMENT2, 0x403, 5, 0
+0x654c, 0x7466, "\000" 
+    IDC_TEXT_ALLIGNMENT2, 0x403, 7, 0
+0x6543, 0x746e, 0x7265, "\000" 
+    IDC_TEXT_ALLIGNMENT2, 0x403, 6, 0
+0x6952, 0x6867, 0x0074, 
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    IDP_OLE_INIT_FAILED     "OLE initialization failed.  Make sure that the OLE libraries are the correct version."
+    IDP_FAILED_TO_CREATE    "Failed to create object.  Make sure the object is entered in the system registry."
+    IDS_MAIN_TOOLBAR        "Standard"
+    IDS_BUILD_TOOLBAR       "Drawing"
+END
+
+STRINGTABLE PRELOAD DISCARDABLE 
+BEGIN
+    IDR_MAINFRAME           "JTDraw"
+    IDR_JTDRAWTYPE          "\nJTDraw\nJTDraw\n\n\nJTDraw.Document\nJTDraw Document"
+    IDR_FORMAT_TOOLBAR      "Format"
+    IDR_JTDRAW              "\nJTDraw\nJTDraw Network View\nJTDraw Files (*.met)\n.met\nJTDraw.Document\nJTDraw Document\nMETL\nJTDraw Files"
+END
+
+STRINGTABLE PRELOAD DISCARDABLE 
+BEGIN
+    AFX_IDS_APP_TITLE       "JTDraw"
+    AFX_IDS_IDLEMESSAGE     "Ready"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_INDICATOR_EXT        "EXT"
+    ID_INDICATOR_CAPS       "CAP"
+    ID_INDICATOR_NUM        "NUM"
+    ID_INDICATOR_SCRL       "SCRL"
+    ID_INDICATOR_OVR        "OVR"
+    ID_INDICATOR_REC        "REC"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_FILE_NEW             "Create a new document\nNew"
+    ID_FILE_OPEN            "Open an existing document\nOpen"
+    ID_FILE_CLOSE           "Close the active document\nClose"
+    ID_FILE_SAVE            "Save the active document\nSave"
+    ID_FILE_SAVE_AS         "Save the active document with a new name\nSave As"
+    ID_FILE_PAGE_SETUP      "Change the printing options\nPage Setup"
+    ID_FILE_PRINT_SETUP     "Change the printer and printing options\nPrint Setup"
+    ID_FILE_PRINT           "Print the active document\nPrint"
+    ID_FILE_PRINT_PREVIEW   "Display full pages\nPrint Preview"
+    ID_FILE_UPDATE          "Update the container to show any changes\nUpdate"
+    ID_FILE_SAVE_COPY_AS    "Save a copy of the active document with a new name\nSave Copy"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_APP_ABOUT            "Display program information, version number and copyright\nAbout"
+    ID_APP_EXIT             "Quit the application; prompts to save documents\nExit"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_FILE_MRU_FILE1       "Open this document"
+    ID_FILE_MRU_FILE2       "Open this document"
+    ID_FILE_MRU_FILE3       "Open this document"
+    ID_FILE_MRU_FILE4       "Open this document"
+    ID_FILE_MRU_FILE5       "Open this document"
+    ID_FILE_MRU_FILE6       "Open this document"
+    ID_FILE_MRU_FILE7       "Open this document"
+    ID_FILE_MRU_FILE8       "Open this document"
+    ID_FILE_MRU_FILE9       "Open this document"
+    ID_FILE_MRU_FILE10      "Open this document"
+    ID_FILE_MRU_FILE11      "Open this document"
+    ID_FILE_MRU_FILE12      "Open this document"
+    ID_FILE_MRU_FILE13      "Open this document"
+    ID_FILE_MRU_FILE14      "Open this document"
+    ID_FILE_MRU_FILE15      "Open this document"
+    ID_FILE_MRU_FILE16      "Open this document"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_NEXT_PANE            "Switch to the next window pane\nNext Pane"
+    ID_PREV_PANE            "Switch back to the previous window pane\nPrevious Pane"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_WINDOW_NEW           "Open another window for the active document\nNew Window"
+    ID_WINDOW_ARRANGE       "Arrange icons at the bottom of the window\nArrange Icons"
+    ID_WINDOW_CASCADE       "Arrange windows so they overlap\nCascade Windows"
+    ID_WINDOW_TILE_HORZ     "Arrange windows as non-overlapping tiles\nTile Windows"
+    ID_WINDOW_TILE_VERT     "Arrange windows as non-overlapping tiles\nTile Windows"
+    ID_WINDOW_SPLIT         "Split the active window into panes\nSplit"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_EDIT_CLEAR           "Erase the selection\nErase"
+    ID_EDIT_CLEAR_ALL       "Erase everything\nErase All"
+    ID_EDIT_COPY            "Copy the selection and put it on the Clipboard\nCopy"
+    ID_EDIT_CUT             "Cut the selection and put it on the Clipboard\nCut"
+    ID_EDIT_FIND            "Find the specified text\nFind"
+    ID_EDIT_PASTE           "Insert Clipboard contents\nPaste"
+    ID_EDIT_PASTE_LINK      "Insert Clipboard contents and a link to its source\nPaste Link"
+    ID_EDIT_PASTE_SPECIAL   "Insert Clipboard contents with options\nPaste Special"
+    ID_EDIT_REPEAT          "Repeat the last action\nRepeat"
+    ID_EDIT_REPLACE         "Replace specific text with different text\nReplace"
+    ID_EDIT_SELECT_ALL      "Select the entire document\nSelect All"
+    ID_EDIT_UNDO            "Undo the last action\nUndo"
+    ID_EDIT_REDO            "Redo the previously undone action\nRedo"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_VIEW_TOOLBAR         "Show or hide the toolbar\nToggle ToolBar"
+    ID_VIEW_STATUS_BAR      "Show or hide the status bar\nToggle StatusBar"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_OLE_INSERT_NEW       "Insert new embedded object\nNew Object"
+    ID_OLE_EDIT_LINKS       "Edit linked objects\nEdit Links"
+    ID_OLE_EDIT_CONVERT     "Convert object to different type\nConvert Object"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_OLE_VERB_FIRST       "Activate embedded or linked object"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    AFX_IDS_SCSIZE          "Change the window size"
+    AFX_IDS_SCMOVE          "Change the window position"
+    AFX_IDS_SCMINIMIZE      "Reduce the window to an icon"
+    AFX_IDS_SCMAXIMIZE      "Enlarge the window to full size"
+    AFX_IDS_SCNEXTWINDOW    "Switch to the next document window"
+    AFX_IDS_SCPREVWINDOW    "Switch to the previous document window"
+    AFX_IDS_SCCLOSE         "Close the active window and prompts to save the documents"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    AFX_IDS_SCRESTORE       "Restore the window to normal size"
+    AFX_IDS_SCTASKLIST      "Activate Task List"
+    AFX_IDS_MDICHILD        "Activate this window"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    AFX_IDS_PREVIEW_CLOSE   "Close print preview mode\nCancel Preview"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_VIEW_GRID            "Show or hide gridlines\nToggle Gridlines"
+    ID_DRAW_SELECT          "Select an Object\nSelect"
+    ID_DRAW_LINE            "Draw a line\nLine"
+    ID_DRAW_RECT            "Draw a rectangular\nRect"
+    ID_DRAW_ROUNDRECT       "Draw a round Rect\nRound Rect"
+    ID_DRAW_ELLIPSE         "Draw a ellcipse\nEllipse"
+    ID_DRAW_POLYGON         "Draw a ploygon\nPolygon"
+    ID_VIEW_OUTPUT          "Show outpout\nOutput"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    IDS_DUMMY_UNDO_ACTION   "Select a Object\nSelect"
+    IDC_ADD_REACTANT        "Show watch bar\nWatch"
+    IDC_ADD_REACTION        "Add a reaction\nReaction"
+    IDC_ADD_REGULATION      "Add a regulation\nRegulation"
+    ID_VIEW_FORMAT_TOOLBAR  "toolbar formatting the network chart\nFormat ToolBar"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_DRAW_ARROW           "Draw a arrow\nArrow"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_CHAR_COLOR           "Choose the color of text\nText Color"
+    ID_FILL_COLOR           "Change fill color\nFill Color"
+    ID_LINE_COLOR           "Change Line Color\nLine Color"
+    ID_DRAW_TEXT            "Draw a text\nText"
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE 9, 1
+#pragma code_page(1252)
+#endif //_WIN32
+#include "res\JTDraw.rc2"  // non-Microsoft Visual C++ edited resources
+#include "afxres.rc"         // Standard components
+#include "afxprint.rc"       // printing/print preview resources
+#include "afxolecl.rc"       // OLE container resources
+#include "afxolesv.rc"       // OLE server resources
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

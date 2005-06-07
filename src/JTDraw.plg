@@ -1,0 +1,143 @@
+<html>
+<body>
+<pre>
+<h1>Build Log</h1>
+<h3>
+--------------------Configuration: JTDraw - Win32 Debug--------------------
+</h3>
+<h3>Command Lines</h3>
+Creating command line "rc.exe /l 0x409 /fo"Debug/JTDraw.res" /d "_DEBUG" /d "_AFXDLL" "C:\My Development\jtdraw\JTDraw.rc"" 
+Creating temporary file "c:\windows\TEMP\RSP81D4.TMP" with contents
+[
+/nologo /MDd /W3 /Gm /GR /GX /ZI /Od /I "../BCGControlBar" /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /Fp"Debug/JTDraw.pch" /Yu"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ /c 
+"C:\My Development\jtdraw\ArrowPicker.cpp"
+"C:\My Development\jtdraw\ArrowWnd.cpp"
+"C:\My Development\jtdraw\BEZIER.CPP"
+"C:\My Development\jtdraw\ChildFrm.cpp"
+"C:\My Development\jtdraw\CntrItem.cpp"
+"C:\My Development\jtdraw\ColorAutoButton.cpp"
+"C:\My Development\jtdraw\ColorButton.cpp"
+"C:\My Development\jtdraw\COLORLIS.CPP"
+"C:\My Development\jtdraw\ColorPopupBar.cpp"
+"C:\My Development\jtdraw\ColourPicker.cpp"
+"C:\My Development\jtdraw\ColourPopup.cpp"
+"C:\My Development\jtdraw\ColourPopupWnd.cpp"
+"C:\My Development\jtdraw\DRAWOBJ.CPP"
+"C:\My Development\jtdraw\DrawProperty.cpp"
+"C:\My Development\jtdraw\DRAWTOOL.CPP"
+"C:\My Development\jtdraw\formatba.cpp"
+"C:\My Development\jtdraw\HyperLink.cpp"
+"C:\My Development\jtdraw\IpFrame.cpp"
+"C:\My Development\jtdraw\JTDraw.cpp"
+"C:\My Development\jtdraw\JTDrawDoc.cpp"
+"C:\My Development\jtdraw\JTDrawView.cpp"
+"C:\My Development\jtdraw\LINE.CPP"
+"C:\My Development\jtdraw\LinePicker.cpp"
+"C:\My Development\jtdraw\LineProperty.cpp"
+"C:\My Development\jtdraw\LineWnd.cpp"
+"C:\My Development\jtdraw\MainFrm.cpp"
+"C:\My Development\jtdraw\notifwdw.cpp"
+"C:\My Development\jtdraw\PROPSET.CPP"
+"C:\My Development\jtdraw\STATPAGE.CPP"
+"C:\My Development\jtdraw\SUMMINFO.CPP"
+"C:\My Development\jtdraw\SUMMPAGE.CPP"
+"C:\My Development\jtdraw\TextProperty.cpp"
+]
+Creating command line "cl.exe @c:\windows\TEMP\RSP81D4.TMP" 
+Creating temporary file "c:\windows\TEMP\RSP81D5.TMP" with contents
+[
+/nologo /MDd /W3 /Gm /GR /GX /ZI /Od /I "../BCGControlBar" /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /Fp"Debug/JTDraw.pch" /Yc"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ /c 
+"C:\My Development\jtdraw\StdAfx.cpp"
+]
+Creating command line "cl.exe @c:\windows\TEMP\RSP81D5.TMP" 
+Creating temporary file "c:\windows\TEMP\RSP81D6.TMP" with contents
+[
+/nologo /subsystem:windows /incremental:yes /pdb:"Debug/JTDraw.pdb" /debug /machine:I386 /out:"Debug/JTDraw.exe" /pdbtype:sept /libpath:"../lib" 
+".\Debug\ArrowPicker.obj"
+".\Debug\ArrowWnd.obj"
+".\Debug\BEZIER.OBJ"
+".\Debug\ChildFrm.obj"
+".\Debug\CntrItem.obj"
+".\Debug\ColorAutoButton.obj"
+".\Debug\ColorButton.obj"
+".\Debug\COLORLIS.OBJ"
+".\Debug\ColorPopupBar.obj"
+".\Debug\ColourPicker.obj"
+".\Debug\ColourPopup.obj"
+".\Debug\ColourPopupWnd.obj"
+".\Debug\DRAWOBJ.OBJ"
+".\Debug\DrawProperty.obj"
+".\Debug\DRAWTOOL.OBJ"
+".\Debug\formatba.obj"
+".\Debug\HyperLink.obj"
+".\Debug\IpFrame.obj"
+".\Debug\JTDraw.obj"
+".\Debug\JTDrawDoc.obj"
+".\Debug\JTDrawView.obj"
+".\Debug\LINE.OBJ"
+".\Debug\LinePicker.obj"
+".\Debug\LineProperty.obj"
+".\Debug\LineWnd.obj"
+".\Debug\MainFrm.obj"
+".\Debug\notifwdw.obj"
+".\Debug\PROPSET.OBJ"
+".\Debug\STATPAGE.OBJ"
+".\Debug\StdAfx.obj"
+".\Debug\SUMMINFO.OBJ"
+".\Debug\SUMMPAGE.OBJ"
+".\Debug\TextProperty.obj"
+".\Debug\JTDraw.res"
+]
+Creating command line "link.exe @c:\windows\TEMP\RSP81D6.TMP"
+<h3>Output Window</h3>
+Compiling resources...
+Compiling...
+StdAfx.cpp
+Automatically linking with BCGCB47d.dll
+Compiling...
+ArrowPicker.cpp
+ArrowWnd.cpp
+BEZIER.CPP
+ChildFrm.cpp
+CntrItem.cpp
+ColorAutoButton.cpp
+ColorButton.cpp
+COLORLIS.CPP
+ColorPopupBar.cpp
+ColourPicker.cpp
+ColourPopup.cpp
+ColourPopupWnd.cpp
+DRAWOBJ.CPP
+C:\My Development\jtdraw\DRAWOBJ.CPP(91) : warning C4800: 'unsigned short' : forcing value to bool 'true' or 'false' (performance warning)
+C:\My Development\jtdraw\DRAWOBJ.CPP(929) : warning C4800: 'int' : forcing value to bool 'true' or 'false' (performance warning)
+DrawProperty.cpp
+DRAWTOOL.CPP
+formatba.cpp
+HyperLink.cpp
+IpFrame.cpp
+JTDraw.cpp
+JTDrawDoc.cpp
+Generating Code...
+Compiling...
+JTDrawView.cpp
+LINE.CPP
+LinePicker.cpp
+LineProperty.cpp
+LineWnd.cpp
+MainFrm.cpp
+notifwdw.cpp
+PROPSET.CPP
+STATPAGE.CPP
+SUMMINFO.CPP
+SUMMPAGE.CPP
+TextProperty.cpp
+Generating Code...
+Linking...
+
+
+
+<h3>Results</h3>
+JTDraw.exe - 0 error(s), 2 warning(s)
+</pre>
+</body>
+</html>
