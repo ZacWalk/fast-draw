@@ -11,3 +11,4 @@ add_executable(fast-draw-tests
 target_link_libraries(fast-draw-tests PRIVATE fast-draw-lib)
 
 add_test(NAME fast-draw-tests COMMAND fast-draw-tests)
+set_tests_properties(fast-draw-tests PROPERTIES LABELS fast-draw)
