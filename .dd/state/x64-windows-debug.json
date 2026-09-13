@@ -1,0 +1,15 @@
+{
+  "files": {
+    "C:\\code\\apps\\fast-draw\\CMakePresets.json": "DC51D43FC3F705C56001282F5096D212A02D80CAD44A96A9D1BD1016E3E02B33"
+  },
+  "mapping": {
+    "test": "x64-debug",
+    "build": "x64-debug",
+    "configure": "x64-debug"
+  },
+  "manifestHash": "88AE6E939CD89C9B12519CF59E719552A2474E85AF503B9D78CAB6C6020F595A",
+  "generator": "Ninja",
+  "directory": "C:\\code\\apps\\fast-draw\\build\\x64-debug",
+  "multiConfig": false,
+  "root": "C:\\code\\apps\\fast-draw"
+}
