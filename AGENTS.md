@@ -10,30 +10,29 @@ configuration fails fast on any other platform or toolchain.
 | --- | --- |
 | `src/` | Application sources |
 | `tests/` | `fast-draw-tests` CTest executable plus the dd smoke test |
-| `cmake/` | Dependency pins (`dd-dependencies.json`) |
+| `cmake/` | dd's dependency manifest (`dd-dependencies.json`), which is empty: zlib and libpng are pinned in `CMakeLists.txt` |
 | `dd.psd1` | Project manifest: targets, presets and output paths |
 | `CMakePresets.json` | `x64-debug` and `x64-release` configure/build/test presets |
 
-## dd build system
-
-This repo uses the vendored dd build system. dd has two modes.
-
-**CLI mode** is the default; each verb runs once and exits:
+## Build and verify
 
 ```pwsh
-.\dd.ps1 test                  # build both configs and run the suite
-.\dd.ps1 build debug
-.\dd.ps1 doctor --json
+.\dd.ps1 build                   # configure + build both configs
+.\dd.ps1 launch                  # build Release, then start the app
+.\dd.ps1 test --label fast-draw  # build both, run fast-draw-tests
 ```
 
-**MCP mode** — `.\dd.ps1 mcp` turns the process into a stdio JSON-RPC server for an
-MCP client, adapting typed requests onto CLI mode. It owns stdout for protocol
-messages, so it prints no result envelope and rejects `--json`. Register it with
-`.\dd.ps1 ide --mcp`.
+**`.\dd.ps1 test --label fast-draw` is the gate.** It runs the `fast-draw-tests`
+CTest target in both configurations.
 
-Project settings live in `dd.psd1`; dependency pins live in
-`cmake/dd-dependencies.json` with `dependencies.owner = 'dd'`. Vendored dd file
-hashes are recorded in `docs/dd-upstream.json`.
+This repository vendors [dd](https://github.com/ZacWalk/dd) without local
+changes: `dd.ps1` and `.dd/`, with hashes tracked by
+[docs/dd-upstream.json](docs/dd-upstream.json). The app-specific settings are in
+`dd.psd1`; zlib and libpng are pinned by tag in the `FetchContent` declarations
+in `CMakeLists.txt`; and
+`.\dd.ps1 commands --json` prints this project's commands. Upstream dd documents
+its [two modes](https://github.com/ZacWalk/dd/blob/main/docs/mcp.md#two-modes)
+and [command set](https://github.com/ZacWalk/dd/blob/main/docs/cli.md#commands).
 
 ## Conventions
 
