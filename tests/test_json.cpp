@@ -153,6 +153,35 @@ TEST(Utf8RoundTrip) {
     CHECK(Utf8Decode("").empty());
 }
 
+TEST(CaretStopsNeverSplitASurrogatePair) {
+    // "a", U+1F600 as a surrogate pair, "b": four UTF-16 units, three characters.
+    const std::wstring text = L"a\xD83D\xDE00" L"b";
+
+    CHECK(IsCaretStop(text, 0));
+    CHECK(IsCaretStop(text, 1));
+    CHECK(!IsCaretStop(text, 2));
+    CHECK(IsCaretStop(text, 3));
+    CHECK(IsCaretStop(text, 4));
+    CHECK(!IsCaretStop(text, 5));
+
+    // Backspace and Left from after the emoji land before it, not inside it.
+    CHECK_EQ(PreviousCaretStop(text, 3), std::size_t(1));
+    CHECK_EQ(PreviousCaretStop(text, 4), std::size_t(3));
+    CHECK_EQ(PreviousCaretStop(text, 1), std::size_t(0));
+    CHECK_EQ(PreviousCaretStop(text, 0), std::size_t(0));
+
+    // Delete and Right from before it step over both halves.
+    CHECK_EQ(NextCaretStop(text, 1), std::size_t(3));
+    CHECK_EQ(NextCaretStop(text, 0), std::size_t(1));
+    CHECK_EQ(NextCaretStop(text, 3), std::size_t(4));
+    CHECK_EQ(NextCaretStop(text, 4), std::size_t(4));
+
+    // An unpaired half is still a character of its own, so it can be removed.
+    const std::wstring lone = L"x\xD83D";
+    CHECK_EQ(PreviousCaretStop(lone, 2), std::size_t(1));
+    CHECK_EQ(NextCaretStop(lone, 1), std::size_t(2));
+}
+
 TEST(JsonCarriesNonAsciiText) {
     const std::wstring original = L"caf\u00e9 \u4f60\u597d";
 

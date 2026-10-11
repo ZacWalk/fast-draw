@@ -33,7 +33,9 @@ public:
 
     void Draw(Renderer& renderer, const Transform& transform) const;
     // Text still goes through GDI; call this after the shapes have been filled.
-    void DrawLabel(HDC dc, const Transform& transform) const;
+    // `fit` trims an overlong label with an ellipsis. A label that is being typed
+    // is drawn in full instead, so the caret always sits beside visible text.
+    void DrawLabel(HDC dc, const Transform& transform, bool fit = true) const;
 
     // Document bounds including the stroke width and any arrow heads.
     Rect Bounds() const;
@@ -64,3 +66,9 @@ HFONT CreateStyleFont(const Style& style, float scale);
 
 // The rectangle the text label is laid out in, in device pixels.
 RECT LabelRect(const DrawObj& object, const Transform& transform);
+
+// Where a Shift-dragged corner handle goes to keep the shape square: onto the
+// diagonal through the corner opposite `handle` in `start`, the position at the
+// start of the drag. An edge handle cannot keep a square, so its target is
+// returned unchanged.
+Point SquareCornerTarget(const Rect& start, int handle, Point target);

@@ -3,6 +3,7 @@
 #include "color_popup.h"
 #include "png_export.h"
 #include "resource.h"
+#include "utf8.h"
 
 #include <windowsx.h>
 
@@ -303,9 +304,12 @@ Style View::EffectiveStyle() const {
 
 void View::ApplyStyle(const Style& style) {
     // Only the fields the sidebar actually changed are pushed onto the
-    // selection, so a mixed selection keeps the rest of its own styling.
+    // selection, so a mixed selection keeps the rest of its own styling. The
+    // defaults for new objects take the same change and nothing else: the
+    // panel is showing a selected object's style, and copying all of it would
+    // hand, say, a text label's missing fill and outline to the next shape.
     const Style previous = EffectiveStyle();
-    style_ = style;
+    ApplyStyleDelta(previous, style, style_);
 
     if (!selection_.empty()) {
         document_->BeginChange();
@@ -465,7 +469,7 @@ void View::Render(Renderer& renderer, HDC dc, const RECT& dirty) const {
 
     const int saved = ::SaveDC(dc);
     ::IntersectClipRect(dc, dirty.left, dirty.top, dirty.right, dirty.bottom);
-    document_->Draw(renderer, dc, transform);
+    document_->Draw(renderer, dc, transform, editing_);
 
     if (document_->Objects().empty()) {
         // Centred on what the user can actually see, not on the page.
@@ -888,13 +892,9 @@ void View::OnMouseMove(POINT point, UINT flags) {
             ::SetCursor(primary->HandleCursor(dragHandle_));
 
             Point target = Snap(local);
-            // Shift constrains a shape to a square.
-            if ((flags & MK_SHIFT) && !IsLinear(primary->kind)) {
-                const long size = (std::max)(std::labs(target.x - dragStart_.left),
-                                             std::labs(target.y - dragStart_.top));
-                target.x = dragStart_.left + (target.x < dragStart_.left ? -size : size);
-                target.y = dragStart_.top + (target.y < dragStart_.top ? -size : size);
-            }
+            // Shift keeps a shape square, pivoting on the opposite corner.
+            if ((flags & MK_SHIFT) && !IsLinear(primary->kind))
+                target = SquareCornerTarget(dragStart_, dragHandle_, target);
             primary->MoveHandle(dragHandle_, target);
             Invalidate();
             break;
@@ -925,6 +925,7 @@ std::size_t View::CaretIndexAt(POINT clientPoint) const {
     std::size_t best = 0;
     int bestDistance = std::abs(clientPoint.x - origin);
     for (std::size_t i = 1; i <= object->text.size(); ++i) {
+        if (!IsCaretStop(object->text, i)) continue;
         SIZE prefix{};
         ::GetTextExtentPoint32W(dc, object->text.c_str(), static_cast<int>(i), &prefix);
         const int distance = std::abs(clientPoint.x - (origin + prefix.cx));
@@ -999,7 +1000,15 @@ void View::OnLeftUp(POINT point, UINT flags) {
     OnMouseMove(point, flags);
 }
 
-void View::OnDoubleClick(POINT point) {
+void View::OnDoubleClick(POINT point, UINT flags) {
+    // The zoom badge holds buttons: a quick second click on one is another
+    // step, not a double-click on whatever lies underneath.
+    const ZoomBadge badge = BadgeLayout();
+    if (::PtInRect(&badge.bounds, point)) {
+        OnLeftDown(point, flags);
+        return;
+    }
+
     const ObjectId id = document_->ObjectAt(ToDoc(point), HitTolerance());
     if (id == ObjectId::None) return;
 
@@ -1044,8 +1053,9 @@ void View::OnChar(wchar_t character) {
 
     if (character == L'\b') {
         if (caret_ == 0) return;
-        object->text.erase(caret_ - 1, 1);
-        --caret_;
+        const std::size_t start = PreviousCaretStop(object->text, caret_);
+        object->text.erase(start, caret_ - start);
+        caret_ = start;
     } else if (character == L'\r' || character == L'\n' || character == L'\t') {
         EndEditing();
         return;
@@ -1064,16 +1074,13 @@ void View::OnKeyDown(WPARAM key) {
     if (DrawObj* object = Find(editing_)) {
         switch (key) {
             case VK_ESCAPE: EndEditing(); return;
-            case VK_LEFT:
-                if (caret_ > 0) --caret_;
-                break;
-            case VK_RIGHT:
-                if (caret_ < object->text.size()) ++caret_;
-                break;
+            case VK_LEFT: caret_ = PreviousCaretStop(object->text, caret_); break;
+            case VK_RIGHT: caret_ = NextCaretStop(object->text, caret_); break;
             case VK_HOME: caret_ = 0; break;
             case VK_END: caret_ = object->text.size(); break;
             case VK_DELETE:
-                if (caret_ < object->text.size()) object->text.erase(caret_, 1);
+                if (caret_ < object->text.size())
+                    object->text.erase(caret_, NextCaretStop(object->text, caret_) - caret_);
                 break;
             default: return;
         }
@@ -1097,11 +1104,26 @@ void View::OnKeyDown(WPARAM key) {
 }
 
 void View::OnContextMenu(POINT screenPoint) {
-    POINT client = screenPoint;
-    ::ScreenToClient(hwnd_, &client);
+    if (screenPoint.x == -1 && screenPoint.y == -1) {
+        // Shift+F10 and the menu key report no position: open the menu on the
+        // selection, or in the middle of the view when nothing is selected.
+        RECT client{};
+        ::GetClientRect(hwnd_, &client);
+        POINT anchor{client.right / 2, client.bottom / 2};
+        if (const DrawObj* object = Primary()) {
+            const Vec2 centre = GetTransform().ToDevice(object->Bounds()).Centre();
+            anchor.x = (std::clamp)(static_cast<LONG>(centre.x), client.left, client.right);
+            anchor.y = (std::clamp)(static_cast<LONG>(centre.y), client.top, client.bottom);
+        }
+        screenPoint = anchor;
+        ::ClientToScreen(hwnd_, &screenPoint);
+    } else {
+        POINT client = screenPoint;
+        ::ScreenToClient(hwnd_, &client);
 
-    const ObjectId hit = document_->ObjectAt(ToDoc(client), HitTolerance());
-    if (hit != ObjectId::None && !IsSelected(hit)) Select(hit, false);
+        const ObjectId hit = document_->ObjectAt(ToDoc(client), HitTolerance());
+        if (hit != ObjectId::None && !IsSelected(hit)) Select(hit, false);
+    }
 
     HMENU menu = ::LoadMenuW(::GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDR_CONTEXT_MENU));
     if (!menu) return;
@@ -1399,7 +1421,9 @@ LRESULT CALLBACK View::WndProc(HWND window, UINT message, WPARAM wParam, LPARAM 
             return 0;
 
         case WM_LBUTTONDBLCLK:
-            if (view) view->OnDoubleClick({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+            if (view)
+                view->OnDoubleClick({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
+                                    static_cast<UINT>(wParam));
             return 0;
 
         case WM_MOUSEMOVE:

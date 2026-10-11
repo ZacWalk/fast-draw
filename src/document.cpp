@@ -12,6 +12,11 @@ constexpr long kFormatVersion = 2;
 // Roughly how many edits can be walked back.
 constexpr std::size_t kMaxHistory = 128;
 
+// A page side read from a file is capped at 100": several times A0, yet small
+// enough that the grid, the scroll range and an export stay tractable. A
+// damaged file asking for kilometres of paper would otherwise hang the view.
+constexpr long kMaxPageSide = 10000;
+
 int NextUntitledIndex() {
     static int next = 1;
     return next++;
@@ -115,10 +120,12 @@ void Document::MoveBackward(ObjectId id) {
     modified_ = true;
 }
 
-void Document::Draw(Renderer& renderer, HDC textDc, const Transform& transform) const {
+void Document::Draw(Renderer& renderer, HDC textDc, const Transform& transform,
+                    ObjectId editing) const {
     for (const DrawObj& object : objects_) {
         object.Draw(renderer, transform);
-        if (textDc) object.DrawLabel(textDc, transform);
+        if (textDc)
+            object.DrawLabel(textDc, transform, editing == ObjectId::None || object.id != editing);
     }
 }
 
@@ -199,7 +206,8 @@ bool Document::Load(HWND owner, const std::filesystem::path& path) {
 
         const Json& page = json["page"];
         const Size size(page["width"].AsInt(pageSize_.cx), page["height"].AsInt(pageSize_.cy));
-        if (size.cx > 0 && size.cy > 0) pageSize_ = size;
+        if (size.cx > 0 && size.cy > 0)
+            pageSize_ = Size((std::min)(size.cx, kMaxPageSide), (std::min)(size.cy, kMaxPageSide));
 
         objects_ = ObjectsFromJson(json["objects"]);
         for (DrawObj& object : objects_) object.id = static_cast<ObjectId>(++nextId_);

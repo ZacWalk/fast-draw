@@ -6,6 +6,9 @@ add_executable(fast-draw-tests
     test_document.cpp
     test_render.cpp
     test_png.cpp
+    test_tab_bar.cpp
+    test_view.cpp
+    test_style_panel.cpp
 )
 
 target_link_libraries(fast-draw-tests PRIVATE fast-draw-lib)
