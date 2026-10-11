@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 
 namespace {
 
@@ -126,7 +127,7 @@ RECT LabelRect(const DrawObj& object, const Transform& transform) {
     return device.ToRect();
 }
 
-void DrawObj::DrawLabel(HDC dc, const Transform& transform) const {
+void DrawObj::DrawLabel(HDC dc, const Transform& transform, bool fit) const {
     if (text.empty()) return;
 
     HFONT font = CreateStyleFont(style, transform.scale);
@@ -138,7 +139,8 @@ void DrawObj::DrawLabel(HDC dc, const Transform& transform) const {
 
     RECT box = LabelRect(*this, transform);
     ::DrawTextW(dc, text.c_str(), -1, &box,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
+                    (fit ? DT_END_ELLIPSIS : DT_NOCLIP));
 
     ::SetBkMode(dc, previousMode);
     ::SetTextColor(dc, previousColour);
@@ -181,7 +183,10 @@ bool DrawObj::HitTest(Point docPoint, long tolerance) const {
 bool DrawObj::IsWithin(const Rect& docRect) const {
     const Rect fixed = position.Normalized();
     const Rect target = docRect.Normalized();
-    return fixed.Union(target) == target;
+    // Compare the edges directly: ::UnionRect ignores an empty rectangle, which
+    // would put every horizontal or vertical line inside any selection band.
+    return fixed.left >= target.left && fixed.right <= target.right &&
+           fixed.top >= target.top && fixed.bottom <= target.bottom;
 }
 
 int DrawObj::HandleCount() const { return IsLinear(kind) ? 2 : 8; }
@@ -261,3 +266,19 @@ HCURSOR DrawObj::HandleCursor(int index) const {
 }
 
 void DrawObj::Offset(Size delta) { position.Offset(delta.cx, delta.cy); }
+
+Point SquareCornerTarget(const Rect& start, int handle, Point target) {
+    // Handles run clockwise from the top left, so a corner's opposite is four on.
+    Point anchor;
+    switch (handle) {
+        case 0: anchor = Point(start.right, start.bottom); break;
+        case 2: anchor = Point(start.left, start.bottom); break;
+        case 4: anchor = Point(start.left, start.top); break;
+        case 6: anchor = Point(start.right, start.top); break;
+        default: return target;
+    }
+
+    const long size = (std::max)(std::labs(target.x - anchor.x), std::labs(target.y - anchor.y));
+    return Point(anchor.x + (target.x < anchor.x ? -size : size),
+                 anchor.y + (target.y < anchor.y ? -size : size));
+}

@@ -273,9 +273,21 @@ void StylePanel::OnMouseLeave() {
     Invalidate();
 }
 
+void StylePanel::OnLeftDown(POINT point) {
+    pressed_ = HitTest(point);
+    if (pressed_ >= 0) ::SetCapture(hwnd_);
+}
+
 void StylePanel::OnLeftUp(POINT point) {
+    // Only a click that started on the same item counts. The release of a click
+    // that began elsewhere - the one that dismissed a colour popup - would
+    // otherwise toggle whatever happens to lie under the pointer.
+    const int pressed = pressed_;
+    pressed_ = -1;
+    if (::GetCapture() == hwnd_) ::ReleaseCapture();
+
     const int index = HitTest(point);
-    if (index >= 0) Activate(static_cast<Item>(index));
+    if (index >= 0 && index == pressed) Activate(static_cast<Item>(index));
 }
 
 void StylePanel::Activate(Item item) {
@@ -383,8 +395,16 @@ LRESULT CALLBACK StylePanel::WndProc(HWND window, UINT message, WPARAM wParam, L
             if (self) self->OnMouseLeave();
             return 0;
 
+        case WM_LBUTTONDOWN:
+            if (self) self->OnLeftDown({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+            return 0;
+
         case WM_LBUTTONUP:
             if (self) self->OnLeftUp({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+            return 0;
+
+        case WM_CAPTURECHANGED:
+            if (self) self->pressed_ = -1;
             return 0;
 
         default: break;
