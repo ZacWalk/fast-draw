@@ -299,6 +299,7 @@ void MainWindow::CloseTab(int index) {
         if (!PromptToSave(*view)) return;
     }
 
+    const int active = activeIndex_;
     views_.erase(views_.begin() + index);
     ::DestroyWindow(handle);
 
@@ -307,6 +308,12 @@ void MainWindow::CloseTab(int index) {
     if (views_.empty()) {
         activeIndex_ = -1;
         NewDocument();
+        return;
+    }
+
+    // Closing a background tab leaves the document in front where it is.
+    if (index != active && active >= 0) {
+        ActivateTab(active > index ? active - 1 : active);
         return;
     }
 
@@ -335,14 +342,20 @@ void MainWindow::OpenDocument() {
     const std::wstring path = RunFileDialog(hwnd_, false, kFileFilter, L"fdr");
     if (path.empty()) return;
 
+    const int previous = activeIndex_;
     HWND handle = NewDocument();
     View* view = View::FromHandle(handle);
     if (!view) return;
 
-    if (view->Doc().Load(hwnd_, path))
+    if (view->Doc().Load(hwnd_, path)) {
         RefreshChrome();
-    else
-        CloseTab(activeIndex_);
+        return;
+    }
+
+    // Drop the tab the failed file would have filled and go back to where the
+    // user was.
+    CloseTab(activeIndex_);
+    if (previous >= 0 && previous < static_cast<int>(views_.size())) ActivateTab(previous);
 }
 
 void MainWindow::OnCommand(int id) {
@@ -433,11 +446,12 @@ void MainWindow::OnInitMenuPopup(HMENU menu) {
 void MainWindow::OnIdle() { RefreshChrome(); }
 
 bool MainWindow::OnClose() {
+    // Nothing is marked clean here: if a later document cancels the close, every
+    // earlier one must still hold its unsaved changes.
     for (HWND handle : views_) {
         View* view = View::FromHandle(handle);
         if (!view) continue;
         if (!PromptToSave(*view)) return false;
-        view->Doc().SetModified(false);
     }
     return true;
 }

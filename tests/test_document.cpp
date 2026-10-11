@@ -161,6 +161,51 @@ TEST(SelectionRectangleContainment) {
     CHECK(!object.IsWithin(Rect(10, 90, 90, 10)));
 }
 
+TEST(SelectionRectangleContainmentForStraightLines) {
+    // A horizontal or vertical line has an empty bounding box, which ::UnionRect
+    // ignores; it must still be judged by where it actually is.
+    const DrawObj horizontal(ShapeKind::Line, Rect(500, 200, 700, 200), Style{});
+    const DrawObj vertical(ShapeKind::Arrow, Rect(500, 200, 500, -200), Style{});
+    const Rect band(-10, 110, 110, -10);
+
+    CHECK(!horizontal.IsWithin(band));
+    CHECK(!vertical.IsWithin(band));
+
+    CHECK(horizontal.IsWithin(Rect(490, 210, 710, 190)));
+    CHECK(vertical.IsWithin(Rect(490, 210, 510, -210)));
+    // Overlapping the band is not enough; the whole line has to be inside it.
+    CHECK(!horizontal.IsWithin(Rect(490, 210, 600, 190)));
+}
+
+TEST(ShiftDraggingACornerKeepsASquarePinnedOnTheOppositeCorner) {
+    // Document space: y up, so top > bottom.
+    const Rect start(0, 100, 200, 0);
+
+    for (int handle : {0, 2, 4, 6}) {
+        DrawObj box(ShapeKind::Rectangle, start, Style{});
+        const int opposite = (handle + 4) % 8;
+        const Point pinned = box.Handle(opposite);
+
+        // Drag the corner well away from the shape, further in x than in y.
+        const Point grabbed = box.Handle(handle);
+        const Point target(grabbed.x + (grabbed.x == 0 ? -150 : 150),
+                           grabbed.y + (grabbed.y == 0 ? -20 : 20));
+        box.MoveHandle(handle, SquareCornerTarget(start, handle, target));
+
+        const Rect result = box.position.Normalized();
+        CHECK_EQ(result.Width(), result.Height());
+        CHECK_EQ(result.Width(), 350L);
+        CHECK(box.Handle(opposite) == pinned);
+    }
+
+    // Edge handles cannot keep a square; their target passes through untouched.
+    CHECK(SquareCornerTarget(start, 3, Point(260, 37)) == Point(260, 37));
+
+    // Creating a shape drags corner 4 out of an empty rectangle at the click.
+    const Rect click(Point(10, 10), Size(0, 0));
+    CHECK(SquareCornerTarget(click, 4, Point(60, -100)) == Point(120, -100));
+}
+
 TEST(BoundsGrowWithTheStrokeAndArrows) {
     Style style;
     style.lineWidth = 4;
@@ -403,6 +448,28 @@ TEST(LoadingClearsTheHistory) {
     CHECK(document.Load(nullptr, path));
     CHECK(!document.CanUndo());
     CHECK(!document.CanRedo());
+
+    std::filesystem::remove(path);
+}
+
+TEST(LoadingCapsAnAbsurdPageSize) {
+    // A damaged file asking for a page 300 km wide used to hang the first paint
+    // drawing its grid.
+    const auto path = TempFile("fast-draw-test-huge-page.fdr");
+    WriteFileText(path, R"({"format":"fast-draw","version":2,)"
+                        R"("page":{"width":2000000000,"height":2000000000},"objects":[]})");
+
+    Document document;
+    CHECK(document.Load(nullptr, path));
+    CHECK(document.PageSize().cx > 0 && document.PageSize().cx <= 10000);
+    CHECK(document.PageSize().cy > 0 && document.PageSize().cy <= 10000);
+
+    // A real paper size comes through untouched.
+    WriteFileText(path, R"({"format":"fast-draw","version":2,)"
+                        R"("page":{"width":1654,"height":1169},"objects":[]})");
+    Document a3;
+    CHECK(a3.Load(nullptr, path));
+    CHECK(a3.PageSize() == Size(1654, 1169));
 
     std::filesystem::remove(path);
 }

@@ -61,6 +61,7 @@ private:
     void OnPaint();
     void OnMouseMove(POINT point);
     void OnMouseLeave();
+    void OnLeftDown(POINT point);
     void OnLeftUp(POINT point);
     int HitTest(POINT point) const;
     void Activate(Item item);
@@ -72,6 +73,8 @@ private:
     Style style_;
     bool hasSelection_ = false;
     int hot_ = -1;
+    // The item a left click started on, or -1; only its release activates it.
+    int pressed_ = -1;
     bool tracking_ = false;
 
     std::array<RECT, static_cast<std::size_t>(Item::Count)> bounds_{};

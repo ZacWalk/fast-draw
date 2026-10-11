@@ -9,7 +9,6 @@ namespace {
 constexpr wchar_t kClassName[] = L"FastDrawTabBar";
 
 constexpr int kBarHeight = 34;
-constexpr int kTabMinWidth = 110;
 constexpr int kTabMaxWidth = 240;
 constexpr int kTabPadding = 12;
 constexpr int kCloseSize = 18;
@@ -63,21 +62,26 @@ std::vector<TabBar::TabLayout> TabBar::LayoutTabs() const {
     const int newTabWidth = ui::Scale(hwnd_, kNewTabWidth);
     const int available = (std::max)(0L, client.right - newTabWidth);
     const int maxWidth = ui::Scale(hwnd_, kTabMaxWidth);
-    const int minWidth = ui::Scale(hwnd_, kTabMinWidth);
-
-    int width = (std::min)(maxWidth, available / static_cast<int>(titles_.size()));
-    width = (std::max)(width, minWidth);
 
     const int closeSize = ui::Scale(hwnd_, kCloseSize);
     const int padding = ui::Scale(hwnd_, kTabPadding);
     const int closeTop = (static_cast<int>(client.bottom) - closeSize) / 2;
 
+    // Tabs share the strip rather than run off its end, which would hide the
+    // active tab and the new-tab button. Titles ellipsize as tabs narrow; a tab
+    // too narrow for its close button loses it (middle-click and Ctrl+W still
+    // close it), so a click on a sliver of a tab always selects it.
+    const int width = (std::max)(
+        1, (std::min)(maxWidth, available / static_cast<int>(titles_.size())));
+    const bool hasClose = width >= closeSize + padding * 2;
+
     int x = 0;
     for (std::size_t i = 0; i < titles_.size(); ++i) {
         TabLayout layout;
         layout.bounds = RECT{x, 0, x + width, client.bottom};
-        layout.close = RECT{layout.bounds.right - padding - closeSize + padding / 3, closeTop,
-                            layout.bounds.right - padding + padding / 3, closeTop + closeSize};
+        if (hasClose)
+            layout.close = RECT{layout.bounds.right - padding - closeSize + padding / 3, closeTop,
+                                layout.bounds.right - padding + padding / 3, closeTop + closeSize};
         layouts.push_back(layout);
         x += width;
     }
@@ -117,6 +121,8 @@ void TabBar::Render(Renderer& renderer, HDC dc) {
         // Overshoot the bottom so only the top corners are rounded.
         tab.bottom += radius;
 
+        if (tab.IsEmpty()) continue;
+
         if (isActive)
             ui::FillRoundRect(renderer, tab, radius, ui::kPanel);
         else if (index == hotTab_)
@@ -128,14 +134,18 @@ void TabBar::Render(Renderer& renderer, HDC dc) {
             ui::FillRoundRect(renderer, accent, 1.0f, ui::kAccent);
         }
 
+        const RECT& close = layouts[i].close;
+        const bool hasClose = ::IsRectEmpty(&close) == FALSE;
+
         RECT textRect = bounds;
         textRect.left += padding;
-        textRect.right = layouts[i].close.left - padding / 2;
+        textRect.right = (hasClose ? close.left : bounds.right) - padding / 2;
         ui::Text(dc, textRect, titles_[i], isActive ? ui::kText : ui::kTextDim,
                  DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX,
                  ui::Font(hwnd_, isActive));
 
-        const RECT& close = layouts[i].close;
+        if (!hasClose) continue;
+
         const RectF closeBox = RectF::FromRect(close);
         if (index == hotClose_)
             ui::FillRoundRect(renderer, closeBox, ui::ScaleF(hwnd_, 4.0f), ui::kPressed);

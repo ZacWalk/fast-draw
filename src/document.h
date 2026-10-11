@@ -45,7 +45,9 @@ public:
     void MoveForward(ObjectId id);
     void MoveBackward(ObjectId id);
 
-    void Draw(Renderer& renderer, HDC textDc, const Transform& transform) const;
+    // `editing` is the object whose label is being typed; it is drawn untrimmed.
+    void Draw(Renderer& renderer, HDC textDc, const Transform& transform,
+              ObjectId editing = ObjectId::None) const;
 
     // Bracket every mutation so it can be undone. Nested calls collapse into
     // one history entry, and an edit that changed nothing leaves no entry.

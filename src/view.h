@@ -112,7 +112,7 @@ private:
     void OnLeftDown(POINT point, UINT flags);
     void OnLeftUp(POINT point, UINT flags);
     void OnMouseMove(POINT point, UINT flags);
-    void OnDoubleClick(POINT point);
+    void OnDoubleClick(POINT point, UINT flags);
     void OnKeyDown(WPARAM key);
     void OnChar(wchar_t character);
     void OnContextMenu(POINT screenPoint);
