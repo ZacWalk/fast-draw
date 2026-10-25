@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "dependencies": {
+    "zlib": {
+      "url": "https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz",
+      "sha256": "17e88863f3600672ab49182f217281b6fc4d3c762bde361935e436a95214d05c",
+      "method": "application"
+    },
+    "libpng": {
+      "url": "https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.44.tar.gz",
+      "sha256": "0ef5b633d0c65f780c4fced27ff832998e71478c13b45dfb6e94f23a82f64f7c",
+      "method": "application"
+    }
+  }
+}

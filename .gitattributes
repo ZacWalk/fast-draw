@@ -1,0 +1,4 @@
+* -text
+# dd's vendored runtime, byte for byte; GitHub should not count it as this project's code
+/dd.ps1 linguist-vendored
+/.dd/** linguist-vendored

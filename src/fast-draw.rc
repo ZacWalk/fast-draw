@@ -1,0 +1,171 @@
+#include <windows.h>
+
+#include "resource.h"
+
+/////////////////////////////////////////////////////////////////////////////
+// Icons
+
+IDI_APP     ICON    "res\\fast-draw.ico"
+IDI_DOC     ICON    "res\\fast-draw-doc.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+// Menus
+
+IDR_MAIN_MENU MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Close\tCtrl+W",              ID_FILE_CLOSE
+        MENUITEM "&Save\tCtrl+S",               ID_FILE_SAVE
+        MENUITEM "Save &As...",                 ID_FILE_SAVE_AS
+        MENUITEM "&Export as PNG...",           ID_FILE_EXPORT_PNG
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...\tCtrl+P",           ID_FILE_PRINT
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Undo\tCtrl+Z",                ID_EDIT_UNDO
+        MENUITEM "&Redo\tCtrl+Y",                ID_EDIT_REDO
+        MENUITEM SEPARATOR
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Paste\tCtrl+V",              ID_EDIT_PASTE
+        MENUITEM "&Delete\tDel",                ID_EDIT_CLEAR
+        MENUITEM SEPARATOR
+        MENUITEM "D&uplicate\tCtrl+D",          ID_EDIT_DUPLICATE
+        MENUITEM "Select &All\tCtrl+A",         ID_EDIT_SELECT_ALL
+        MENUITEM "Edit &Label\tF2",             ID_EDIT_TEXT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "Zoom &In\tCtrl++",            ID_VIEW_ZOOM_IN
+        MENUITEM "Zoom &Out\tCtrl+-",           ID_VIEW_ZOOM_OUT
+        MENUITEM "&Actual Size\tCtrl+0",        ID_VIEW_ZOOM_ACTUAL
+        MENUITEM "&Fit Page\tCtrl+9",           ID_VIEW_ZOOM_FIT
+        MENUITEM SEPARATOR
+        MENUITEM "&Grid",                       ID_VIEW_GRID
+        MENUITEM "S&nap to Grid",               ID_VIEW_SNAP
+        MENUITEM "&Paper Colour...",            ID_VIEW_PAPER_COLOUR
+        POPUP "Page Si&ze"
+        BEGIN
+            MENUITEM "&Letter Landscape",       ID_PAGE_LETTER_LANDSCAPE
+            MENUITEM "Letter &Portrait",        ID_PAGE_LETTER_PORTRAIT
+            MENUITEM "&A4 Landscape",           ID_PAGE_A4_LANDSCAPE
+            MENUITEM "A&4 Portrait",            ID_PAGE_A4_PORTRAIT
+            MENUITEM "A&3 Landscape",           ID_PAGE_A3_LANDSCAPE
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "&Sidebar",                    ID_VIEW_SIDEBAR
+    END
+    POPUP "&Arrange"
+    BEGIN
+        MENUITEM "Bring to &Front",             ID_OBJECT_FRONT
+        MENUITEM "Send to &Back",               ID_OBJECT_BACK
+        MENUITEM "Bring F&orward",              ID_OBJECT_FORWARD
+        MENUITEM "Send Back&ward",              ID_OBJECT_BACKWARD
+        MENUITEM SEPARATOR
+        MENUITEM "Align &Left",                 ID_OBJECT_ALIGN_LEFT
+        MENUITEM "Align &Centre",               ID_OBJECT_ALIGN_CENTRE
+        MENUITEM "Align &Right",                ID_OBJECT_ALIGN_RIGHT
+        MENUITEM "Align &Top",                  ID_OBJECT_ALIGN_TOP
+        MENUITEM "Align &Middle",               ID_OBJECT_ALIGN_MIDDLE
+        MENUITEM "Align Botto&m",               ID_OBJECT_ALIGN_BOTTOM
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&Next Tab\tCtrl+Tab",         ID_WINDOW_NEXT_TAB
+        MENUITEM "&Previous Tab\tCtrl+Shift+Tab", ID_WINDOW_PREV_TAB
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About fast-draw...",         ID_APP_ABOUT
+    END
+END
+
+IDR_CONTEXT_MENU MENU
+BEGIN
+    POPUP "context"
+    BEGIN
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Delete\tDel",                ID_EDIT_CLEAR
+        MENUITEM SEPARATOR
+        MENUITEM "D&uplicate\tCtrl+D",          ID_EDIT_DUPLICATE
+        MENUITEM "Edit &Label\tF2",             ID_EDIT_TEXT
+        MENUITEM SEPARATOR
+        MENUITEM "Bring to &Front",             ID_OBJECT_FRONT
+        MENUITEM "Send to &Back",               ID_OBJECT_BACK
+        POPUP "&Align"
+        BEGIN
+            MENUITEM "&Left",                   ID_OBJECT_ALIGN_LEFT
+            MENUITEM "&Centre",                 ID_OBJECT_ALIGN_CENTRE
+            MENUITEM "&Right",                  ID_OBJECT_ALIGN_RIGHT
+            MENUITEM "&Top",                    ID_OBJECT_ALIGN_TOP
+            MENUITEM "&Middle",                 ID_OBJECT_ALIGN_MIDDLE
+            MENUITEM "&Bottom",                 ID_OBJECT_ALIGN_BOTTOM
+        END
+    END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// Accelerators
+
+IDR_ACCELERATORS ACCELERATORS
+BEGIN
+    "N",            ID_FILE_NEW,            VIRTKEY, CONTROL, NOINVERT
+    "O",            ID_FILE_OPEN,           VIRTKEY, CONTROL, NOINVERT
+    "S",            ID_FILE_SAVE,           VIRTKEY, CONTROL, NOINVERT
+    "P",            ID_FILE_PRINT,          VIRTKEY, CONTROL, NOINVERT
+    "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL, NOINVERT
+    "Y",            ID_EDIT_REDO,           VIRTKEY, CONTROL, NOINVERT
+    "Z",            ID_EDIT_REDO,           VIRTKEY, CONTROL, SHIFT, NOINVERT
+    "X",            ID_EDIT_CUT,            VIRTKEY, CONTROL, NOINVERT
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL, NOINVERT
+    "V",            ID_EDIT_PASTE,          VIRTKEY, CONTROL, NOINVERT
+    "A",            ID_EDIT_SELECT_ALL,     VIRTKEY, CONTROL, NOINVERT
+    "D",            ID_EDIT_DUPLICATE,      VIRTKEY, CONTROL, NOINVERT
+    "W",            ID_WINDOW_CLOSE_TAB,    VIRTKEY, CONTROL, NOINVERT
+    "0",            ID_VIEW_ZOOM_ACTUAL,    VIRTKEY, CONTROL, NOINVERT
+    "9",            ID_VIEW_ZOOM_FIT,       VIRTKEY, CONTROL, NOINVERT
+    VK_OEM_PLUS,    ID_VIEW_ZOOM_IN,        VIRTKEY, CONTROL, NOINVERT
+    VK_ADD,         ID_VIEW_ZOOM_IN,        VIRTKEY, CONTROL, NOINVERT
+    VK_OEM_MINUS,   ID_VIEW_ZOOM_OUT,       VIRTKEY, CONTROL, NOINVERT
+    VK_SUBTRACT,    ID_VIEW_ZOOM_OUT,       VIRTKEY, CONTROL, NOINVERT
+    VK_DELETE,      ID_EDIT_CLEAR,          VIRTKEY, NOINVERT
+    VK_TAB,         ID_WINDOW_NEXT_TAB,     VIRTKEY, CONTROL, NOINVERT
+    VK_TAB,         ID_WINDOW_PREV_TAB,     VIRTKEY, CONTROL, SHIFT, NOINVERT
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// Version
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 2,0,0,0
+ PRODUCTVERSION 2,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "FileDescription", "fast-draw"
+            VALUE "FileVersion", "2.0.0.0"
+            VALUE "InternalName", "fast-draw"
+            VALUE "OriginalFilename", "fast-draw.exe"
+            VALUE "ProductName", "fast-draw"
+            VALUE "ProductVersion", "2.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
