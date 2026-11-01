@@ -3,10 +3,11 @@
 #include "canvas.h"
 #include "file_io.h"
 #include "png_export.h"
+#include "platform.h"
 
+#include <libfiles/encode.h>
 #include <png.h>
 
-#include <cstdio>
 #include <filesystem>
 #include <vector>
 
@@ -22,53 +23,34 @@ struct DecodedImage {
     }
 };
 
-// A minimal reader so the tests verify what was actually encoded.
+// A minimal reader so the tests verify what was actually encoded. The
+// libpng target here is the copy built and owned by libfiles; fast-draw's
+// production code only reaches it through libfiles::encode_png.
 DecodedImage DecodePng(const std::filesystem::path& path) {
-    std::FILE* file = nullptr;
-    if (::_wfopen_s(&file, path.c_str(), L"rb") != 0 || !file)
-        throw FileError("cannot open the PNG for reading");
+   const std::string encoded = ReadFileText(path);
+   png_image png{};
+   png.version = PNG_IMAGE_VERSION;
+   if (!::png_image_begin_read_from_memory(&png, encoded.data(), encoded.size()))
+       throw FileError("libpng failed to read the image");
+   png.format = PNG_FORMAT_RGBA;
 
-    png_structp png = ::png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-    png_infop info = ::png_create_info_struct(png);
-
-    if (setjmp(png_jmpbuf(png))) {
-        ::png_destroy_read_struct(&png, &info, nullptr);
-        std::fclose(file);
-        throw FileError("libpng failed to read the image");
-    }
-
-    ::png_init_io(png, file);
-    ::png_read_info(png, info);
-
-    DecodedImage image;
-    image.width = static_cast<int>(::png_get_image_width(png, info));
-    image.height = static_cast<int>(::png_get_image_height(png, info));
-
-    ::png_set_expand(png);
-    ::png_set_strip_16(png);
-    ::png_set_filler(png, 0xFF, PNG_FILLER_AFTER);
-    ::png_set_gray_to_rgb(png);
-    ::png_read_update_info(png, info);
-
-    std::vector<png_byte> row(static_cast<std::size_t>(image.width) * 4);
-    image.pixels.resize(static_cast<std::size_t>(image.width) * image.height);
-
-    for (int y = 0; y < image.height; ++y) {
-        png_bytep rowPointer = row.data();
-        ::png_read_row(png, rowPointer, nullptr);
-        for (int x = 0; x < image.width; ++x) {
-            const png_byte* source = row.data() + static_cast<std::size_t>(x) * 4;
-            image.pixels[static_cast<std::size_t>(y) * image.width + x] =
-                (static_cast<std::uint32_t>(source[3]) << 24) |
-                (static_cast<std::uint32_t>(source[0]) << 16) |
-                (static_cast<std::uint32_t>(source[1]) << 8) |
-                static_cast<std::uint32_t>(source[2]);
-        }
-    }
-
-    ::png_destroy_read_struct(&png, &info, nullptr);
-    std::fclose(file);
-    return image;
+   std::vector<png_byte> rgba(PNG_IMAGE_SIZE(png));
+   if (!::png_image_finish_read(&png, nullptr, rgba.data(), 0, nullptr)) {
+       ::png_image_free(&png);
+       throw FileError("libpng failed to decode the image");
+   }
+   DecodedImage result;
+   result.width = static_cast<int>(png.width);
+   result.height = static_cast<int>(png.height);
+   result.pixels.resize(static_cast<std::size_t>(result.width) * result.height);
+   for (std::size_t i = 0; i < result.pixels.size(); ++i) {
+       const auto* source = rgba.data() + i * 4;
+       result.pixels[i] = (static_cast<std::uint32_t>(source[3]) << 24) |
+                          (static_cast<std::uint32_t>(source[0]) << 16) |
+                          (static_cast<std::uint32_t>(source[1]) << 8) |
+                          static_cast<std::uint32_t>(source[2]);
+   }
+   return result;
 }
 
 std::filesystem::path TempImage(const char* name) {
@@ -85,7 +67,6 @@ TEST(CanvasStartsInvalidAndResizes) {
     CHECK(canvas.IsValid());
     CHECK_EQ(canvas.Width(), 16);
     CHECK_EQ(canvas.Height(), 8);
-    CHECK(canvas.Dc() != nullptr);
 
     // A zero size releases the surface rather than leaving a stale one.
     CHECK(!canvas.Resize(0, 10));
@@ -166,28 +147,75 @@ TEST(PngRoundTripPreservesAlpha) {
     std::filesystem::remove(path);
 }
 
-TEST(GdiCanDrawIntoTheCanvas) {
-    // The canvas is a DIB section so text can still be rendered by GDI.
+TEST(LibfilesPngBoundaryAcceptsCanvasBgra) {
+    Canvas canvas;
+    CHECK(canvas.Resize(2, 1));
+    canvas.Row(0)[0] = 0x80402010;
+    canvas.Row(0)[1] = 0xFF102030;
+
+    libfiles::image_view image;
+    image.pixels = reinterpret_cast<const std::uint8_t*>(canvas.Pixels());
+    image.stride = sizeof(std::uint32_t) * 2;
+    image.width = 2;
+    image.height = 1;
+    image.format = libfiles::pixel_format::bgra8;
+
+    const libfiles::encoded encoded = libfiles::encode_png(image, 1, {});
+    CHECK(encoded.data.size() > 8);
+    CHECK_EQ(encoded.data[0], static_cast<std::uint8_t>(0x89));
+    CHECK_EQ(encoded.data[1], static_cast<std::uint8_t>('P'));
+    CHECK_EQ(encoded.data[2], static_cast<std::uint8_t>('N'));
+    CHECK_EQ(encoded.data[3], static_cast<std::uint8_t>('G'));
+}
+
+TEST(SharedPixelSurfaceDrawContextWritesPixels) {
     Canvas canvas;
     CHECK(canvas.Resize(20, 20));
     canvas.Clear(0xFF000000);
 
-    RECT rect{0, 0, 20, 20};
-    HBRUSH brush = ::CreateSolidBrush(RGB(255, 255, 255));
-    ::FillRect(canvas.Dc(), &rect, brush);
-    ::DeleteObject(brush);
+    {
+        auto draw = pf::create_pixel_surface_context(canvas.Surface());
+        CHECK(draw != nullptr);
+        draw->fill_solid_rect({0, 0, 20, 20}, pf::color_t{255, 255, 255});
+    }
 
     CHECK_EQ(canvas.Row(10)[10] & 0x00FFFFFFu, 0x00FFFFFFu);
 }
 
-TEST(ArgbFromColorRefSwapsChannels) {
-    // COLORREF is 0x00BBGGRR; the canvas stores 0xAARRGGBB.
-    CHECK_EQ(ArgbFromColorRef(RGB(0x12, 0x34, 0x56)), 0xFF123456u);
-    CHECK_EQ(ArgbFromColorRef(RGB(255, 0, 0)), 0xFFFF0000u);
-    CHECK_EQ(ArgbFromColorRef(RGB(0, 0, 255), 0x80), 0x800000FFu);
+TEST(ArgbFromColorPreservesChannels) {
+    CHECK_EQ(ArgbFromColor(Rgb(0x12, 0x34, 0x56)), 0xFF123456u);
+    CHECK_EQ(ArgbFromColor(Rgb(255, 0, 0)), 0xFFFF0000u);
+    CHECK_EQ(ArgbFromColor(Rgb(0, 0, 255), 0x80), 0x800000FFu);
 }
 
 TEST(ExportingAnEmptyCanvasFails) {
     Canvas canvas;
     CHECK_THROWS(WritePng(canvas, TempImage("fast-draw-test-empty.png")), FileError);
+}
+
+TEST(ExportingToAnUnavailableFileFails) {
+    Canvas canvas;
+    CHECK(canvas.Resize(2, 2));
+    const auto path = std::filesystem::temp_directory_path() /
+                      "fast-draw-directory-that-does-not-exist" / "image.png";
+    CHECK_THROWS(WritePng(canvas, path), FileError);
+}
+
+TEST(AtomicPngWriteReportsSharedWriterFailures) {
+    Canvas canvas;
+    CHECK(canvas.Resize(2, 2));
+    const auto path = TempImage("fast-draw-atomic-failure.png");
+    const pf::atomic_file_test_failure failures[] = {
+        pf::atomic_file_test_failure::open,
+        pf::atomic_file_test_failure::write,
+        pf::atomic_file_test_failure::flush,
+        pf::atomic_file_test_failure::commit,
+    };
+
+    for (const auto failure : failures) {
+        pf::test_set_atomic_file_failure(failure);
+        CHECK_THROWS(WritePng(canvas, path), FileError);
+        pf::test_set_atomic_file_failure(pf::atomic_file_test_failure::none);
+        std::filesystem::remove(path);
+    }
 }

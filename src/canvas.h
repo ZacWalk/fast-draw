@@ -1,73 +1,47 @@
-// A 32-bit BGRA surface backed by a DIB section.
-//
-// Using a DIB section means the software renderer and GDI can write to the same
-// pixels: shapes are rasterized directly into `pixels_`, while text still goes
-// through GDI via `dc_`.
+// A 32-bit BGRA8 pixel surface owned by the shared desktop layer.
 
 #pragma once
 
 #include "geometry.h"
-
-#include <windows.h>
 
 #include <cstdint>
 
 class Canvas {
 public:
     Canvas() = default;
-    ~Canvas() { Destroy(); }
+    ~Canvas() = default;
 
     Canvas(const Canvas&) = delete;
     Canvas& operator=(const Canvas&) = delete;
 
-    Canvas(Canvas&& other) noexcept { MoveFrom(other); }
-    Canvas& operator=(Canvas&& other) noexcept {
-        if (this != &other) {
-            Destroy();
-            MoveFrom(other);
-        }
-        return *this;
-    }
+    Canvas(Canvas&&) noexcept = default;
+    Canvas& operator=(Canvas&&) noexcept = default;
 
     bool Resize(int width, int height);
 
-    bool IsValid() const { return pixels_ != nullptr; }
-    int Width() const { return width_; }
-    int Height() const { return height_; }
-    Size GetSize() const { return Size(width_, height_); }
+    bool IsValid() const { return surface_.width > 0 && surface_.height > 0; }
+    int Width() const { return surface_.width; }
+    int Height() const { return surface_.height; }
+    Size GetSize() const { return Size(surface_.width, surface_.height); }
 
-    // Rows are contiguous and top-down, so the stride equals the width.
-    std::uint32_t* Pixels() { return pixels_; }
-    const std::uint32_t* Pixels() const { return pixels_; }
-    std::uint32_t* Row(int y) { return pixels_ + static_cast<std::ptrdiff_t>(y) * width_; }
+    std::uint32_t* Pixels() { return surface_.pixels.data(); }
+    const std::uint32_t* Pixels() const { return surface_.pixels.data(); }
+    std::uint32_t* Row(int y) { return surface_.pixels.data() + static_cast<std::ptrdiff_t>(y) * Width(); }
     const std::uint32_t* Row(int y) const {
-        return pixels_ + static_cast<std::ptrdiff_t>(y) * width_;
+        return surface_.pixels.data() + static_cast<std::ptrdiff_t>(y) * Width();
     }
 
-    HDC Dc() const { return dc_; }
+    pf::pixel_surface& Surface() { return surface_; }
+    const pf::pixel_surface& Surface() const { return surface_; }
 
-    // `colour` is 0xAARRGGBB.
+    // `colour` is 0xAARRGGBB; the surface bytes are BGRA8.
     void Clear(std::uint32_t colour);
-
-    // GDI text output leaves the alpha byte at zero; call this before saving.
     void SetOpaque();
 
 private:
-    void Destroy();
-    void MoveFrom(Canvas& other);
-
-    HDC dc_ = nullptr;
-    HBITMAP bitmap_ = nullptr;
-    HGDIOBJ previousBitmap_ = nullptr;
-    std::uint32_t* pixels_ = nullptr;
-    int width_ = 0;
-    int height_ = 0;
+    pf::pixel_surface surface_;
 };
 
-// 0xAARRGGBB from a Win32 COLORREF (0x00BBGGRR).
-inline std::uint32_t ArgbFromColorRef(COLORREF colour, std::uint8_t alpha = 255) {
-    return (static_cast<std::uint32_t>(alpha) << 24) |
-           (static_cast<std::uint32_t>(GetRValue(colour)) << 16) |
-           (static_cast<std::uint32_t>(GetGValue(colour)) << 8) |
-           static_cast<std::uint32_t>(GetBValue(colour));
+inline std::uint32_t ArgbFromColor(Color colour, std::uint8_t alpha = 255) {
+    return (static_cast<std::uint32_t>(alpha) << 24) | (colour & 0x00ffffffu);
 }

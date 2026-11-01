@@ -1,5 +1,5 @@
-// The style inspector: fill, gradient, line and text settings for the current
-// selection, or the defaults new objects are created with.
+// The hand-drawn style inspector.  It is rendered into an app-owned surface;
+// libdesktop delivers the containing window's input and owns its lifetime.
 
 #pragma once
 
@@ -8,17 +8,26 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 
 class StylePanel {
 public:
-    static void RegisterWindowClass(HINSTANCE instance);
-    static HWND Create(HWND parent, int controlId);
-    static StylePanel* FromHandle(HWND window);
+    StylePanel() = default;
 
+    void SetExtent(Size extent, double dpiScale);
     void SetStyle(const Style& style, bool hasSelection);
     int PreferredHeight() const;
 
+    void Render(Renderer& renderer, Canvas& canvas);
+    void OnMouseMove(Point point);
+    void OnMouseLeave();
+    void OnLeftDown(Point point);
+    void OnLeftUp(Point point);
+
     std::function<void(const Style&)> onChange;
+    std::function<std::optional<Color>(Color)> onPickColour;
+    std::function<void()> onInvalidate;
+    std::function<void(bool)> onCapture;
 
 private:
     enum class Item : int {
@@ -49,37 +58,26 @@ private:
         Count,
     };
 
-    explicit StylePanel(HWND window) : hwnd_(window) {}
-
-    static LRESULT CALLBACK WndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
-
-    RECT& Bounds(Item item) { return bounds_[static_cast<std::size_t>(item)]; }
-    const RECT& Bounds(Item item) const { return bounds_[static_cast<std::size_t>(item)]; }
+    Rect& Bounds(Item item) { return bounds_[static_cast<std::size_t>(item)]; }
+    const Rect& Bounds(Item item) const { return bounds_[static_cast<std::size_t>(item)]; }
 
     void Layout();
-    void Render(Renderer& renderer, HDC dc);
-    void OnPaint();
-    void OnMouseMove(POINT point);
-    void OnMouseLeave();
-    void OnLeftDown(POINT point);
-    void OnLeftUp(POINT point);
-    int HitTest(POINT point) const;
+    int HitTest(Point point) const;
     void Activate(Item item);
     void Publish();
-    void Invalidate() { ::InvalidateRect(hwnd_, nullptr, FALSE); }
+    void Invalidate();
 
-    HWND hwnd_ = nullptr;
-    ui::Surface surface_;
+    Size extent_{};
+    double dpiScale_ = 1.0;
     Style style_;
     bool hasSelection_ = false;
     int hot_ = -1;
-    // The item a left click started on, or -1; only its release activates it.
     int pressed_ = -1;
     bool tracking_ = false;
 
-    std::array<RECT, static_cast<std::size_t>(Item::Count)> bounds_{};
-    std::array<RECT, 3> headers_{};
-    RECT widthValue_{};
-    RECT sizeValue_{};
+    std::array<Rect, static_cast<std::size_t>(Item::Count)> bounds_{};
+    std::array<Rect, 3> headers_{};
+    Rect widthValue_{};
+    Rect sizeValue_{};
     int contentHeight_ = 0;
 };

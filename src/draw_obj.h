@@ -10,8 +10,6 @@
 #include "shapes.h"
 #include "style.h"
 
-#include <windows.h>
-
 #include <cstdint>
 #include <string>
 
@@ -32,10 +30,11 @@ public:
     void BuildPath(const Transform& transform, Path& out) const;
 
     void Draw(Renderer& renderer, const Transform& transform) const;
-    // Text still goes through GDI; call this after the shapes have been filled.
+    // Text uses libdesktop's shared draw context; call this after the shapes
+    // have been filled.
     // `fit` trims an overlong label with an ellipsis. A label that is being typed
     // is drawn in full instead, so the caret always sits beside visible text.
-    void DrawLabel(HDC dc, const Transform& transform, bool fit = true) const;
+    void DrawLabel(Canvas& canvas, const Transform& transform, bool fit = true) const;
 
     // Document bounds including the stroke width and any arrow heads.
     Rect Bounds() const;
@@ -46,8 +45,6 @@ public:
     int HandleCount() const;
     Point Handle(int index) const;
     void MoveHandle(int index, Point docPoint);
-    HCURSOR HandleCursor(int index) const;
-
     void Offset(Size delta);
 
     ShapeKind kind = ShapeKind::Rectangle;
@@ -62,10 +59,10 @@ public:
 };
 
 // The label font at a given document-to-device scale. The caller owns it.
-HFONT CreateStyleFont(const Style& style, float scale);
+pf::font_handle CreateStyleFont(const Style& style, float scale);
 
 // The rectangle the text label is laid out in, in device pixels.
-RECT LabelRect(const DrawObj& object, const Transform& transform);
+Rect LabelRect(const DrawObj& object, const Transform& transform);
 
 // Where a Shift-dragged corner handle goes to keep the shape square: onto the
 // diagonal through the corner opposite `handle` in `start`, the position at the

@@ -1,20 +1,17 @@
 #include "view.h"
 
-#include "color_popup.h"
+#include "file_io.h"
 #include "png_export.h"
 #include "resource.h"
 #include "utf8.h"
-
-#include <windowsx.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 namespace {
-
-constexpr wchar_t kViewClassName[] = L"FastDrawView";
 
 // Gap between the workspace edge and the paper, in device pixels at 96 dpi.
 constexpr int kPageMargin = 28;
@@ -32,9 +29,8 @@ constexpr float kMaxZoom = 8.0f;
 constexpr float kZoomStep = 1.25f;
 
 constexpr int kExportDpi = 150;
-constexpr int kPrintDpi = 200;
 
-constexpr UINT_PTR kCaretTimer = 1;
+constexpr unsigned int kCaretTimer = 1;
 
 // Page sizes in document units, indexed by ID_PAGE_FIRST..ID_PAGE_LAST.
 constexpr Size kPageSizes[] = {
@@ -57,8 +53,6 @@ long RoundTo(long value, long step) {
     return (value + half) / step * step;
 }
 
-bool AltHeld() { return (::GetKeyState(VK_MENU) & 0x8000) != 0; }
-
 // Axis-aligned extents of an object in document space, y increasing upwards.
 struct Extent {
     long minX, maxX, minY, maxY;
@@ -71,86 +65,67 @@ Extent ExtentOf(const Rect& rect) {
 
 }  // namespace
 
-UINT DrawClipboardFormat() {
-    static const UINT format = ::RegisterClipboardFormatW(L"fast-draw objects (JSON)");
-    return format;
-}
-
 bool RenderDocumentToCanvas(const Document& document, Canvas& canvas, int dpi) {
     const Size page = document.PageSize();
-    if (!canvas.Resize(::MulDiv(page.cx, dpi, 100), ::MulDiv(page.cy, dpi, 100))) return false;
+    if (!canvas.Resize(static_cast<int>((static_cast<long long>(page.cx) * dpi) / 100),
+                      static_cast<int>((static_cast<long long>(page.cy) * dpi) / 100)))
+        return false;
 
     Renderer renderer(canvas);
-    renderer.Clear(ArgbFromColorRef(document.PaperColour()));
+    renderer.Clear(ArgbFromColor(document.PaperColour()));
 
     Transform transform;
     transform.scale = static_cast<float>(dpi) / 100.0f;
     transform.offsetX = page.cx * 0.5f * transform.scale;
     transform.offsetY = page.cy * 0.5f * transform.scale;
 
-    document.Draw(renderer, canvas.Dc(), transform);
+    document.Draw(renderer, canvas, transform);
     canvas.SetOpaque();
     return true;
 }
 
-// ------------------------------------------------------ creation / teardown
+// ------------------------------------------------------ creation / layout
 
-void View::RegisterWindowClass(HINSTANCE instance) {
-    WNDCLASSEXW wc{};
-    wc.cbSize = sizeof(wc);
-    wc.style = CS_DBLCLKS;
-    wc.lpfnWndProc = &View::WndProc;
-    wc.hInstance = instance;
-    wc.hCursor = nullptr;  // the active tool picks the cursor
-    wc.lpszClassName = kViewClassName;
-    ::RegisterClassExW(&wc);
-}
-
-HWND View::Create(HWND parent) {
-    return ::CreateWindowExW(0, kViewClassName, L"",
-                             WS_CHILD | WS_CLIPSIBLINGS | WS_HSCROLL | WS_VSCROLL, 0, 0, 0, 0,
-                             parent, nullptr, ::GetModuleHandleW(nullptr), nullptr);
-}
-
-View* View::FromHandle(HWND window) {
-    if (!window) return nullptr;
-    return reinterpret_cast<View*>(::GetWindowLongPtrW(window, GWLP_USERDATA));
-}
-
-View::View(HWND window, std::unique_ptr<Document> document)
-    : hwnd_(window), document_(std::move(document)) {}
+View::View(std::unique_ptr<Document> document, pf::window_frame_ptr frame)
+    : frame_(std::move(frame)), document_(std::move(document)) {}
 
 View::~View() = default;
+
+void View::SetViewport(const Size extent, const double dpiScale) {
+    viewport_ = extent;
+    dpiScale_ = dpiScale;
+    UpdateScrollBars();
+}
 
 // ------------------------------------------------------------- coordinates
 
 Transform View::GetTransform() const {
     const Size page = document_->PageSize();
-    const float margin = ui::ScaleF(hwnd_, static_cast<float>(kPageMargin));
+    const float margin = ui::ScaleF(dpiScale_, static_cast<float>(kPageMargin));
 
     Transform transform;
-    transform.scale = static_cast<float>(ui::Dpi(hwnd_)) / 100.0f * zoom_;
+    transform.scale = static_cast<float>(dpiScale_ * 96.0 / 100.0) * zoom_;
     transform.offsetX = margin - scroll_.x + page.cx * 0.5f * transform.scale;
     transform.offsetY = margin - scroll_.y + page.cy * 0.5f * transform.scale;
     return transform;
 }
 
-Point View::ToDoc(POINT clientPoint) const {
+Point View::ToDoc(const Point clientPoint) const {
     return GetTransform().ToDoc(
         Vec2{static_cast<float>(clientPoint.x), static_cast<float>(clientPoint.y)});
 }
 
 long View::HitTolerance() const {
-    return (std::max)(3L, static_cast<long>(ui::ScaleF(hwnd_, 5.0f) / GetTransform().scale));
+    return (std::max)(3L, static_cast<long>(ui::ScaleF(dpiScale_, 5.0f) / GetTransform().scale));
 }
 
 Point View::Snap(Point docPoint) const {
-    if (!snap_ || AltHeld()) return docPoint;
+    if (!snap_ || altHeld_) return docPoint;
     return Point(RoundTo(docPoint.x, kMinorGrid), RoundTo(docPoint.y, kMinorGrid));
 }
 
 int View::HandleAt(const DrawObj& object, Point docPoint) const {
-    const long reach = static_cast<long>(ui::ScaleF(hwnd_, 6.0f) / GetTransform().scale);
+    const long reach = static_cast<long>(ui::ScaleF(dpiScale_, 6.0f) / GetTransform().scale);
     for (int i = 0; i < object.HandleCount(); ++i) {
         const Point handle = object.Handle(i);
         if (std::labs(handle.x - docPoint.x) <= reach && std::labs(handle.y - docPoint.y) <= reach)
@@ -336,7 +311,7 @@ void View::DrawPage(Renderer& renderer, const Transform& transform) const {
     const RectF paper =
         transform.ToDevice(Rect(-page.cx / 2, page.cy / 2, page.cx / 2, -page.cy / 2));
 
-    const float shadow = ui::ScaleF(hwnd_, 3.0f);
+    const float shadow = ui::ScaleF(dpiScale_, 3.0f);
     ui::FillRoundRect(renderer,
                       RectF{paper.left + shadow, paper.top + shadow, paper.right + shadow,
                             paper.bottom + shadow},
@@ -368,7 +343,7 @@ void View::DrawPage(Renderer& renderer, const Transform& transform) const {
 }
 
 void View::DrawSelection(Renderer& renderer, const Transform& transform) const {
-    const float handle = ui::ScaleF(hwnd_, 4.0f);
+    const float handle = ui::ScaleF(dpiScale_, 4.0f);
 
     for (const ObjectId id : selection_) {
         const DrawObj* object = Find(id);
@@ -389,66 +364,64 @@ void View::DrawSelection(Renderer& renderer, const Transform& transform) const {
     }
 }
 
-void View::DrawCaret(Renderer& renderer, HDC dc, const Transform& transform) const {
+void View::DrawCaret(Renderer& renderer, Canvas& canvas,
+                     const Transform& transform) const {
     const DrawObj* object = Find(editing_);
     if (!object) return;
 
-    HFONT font = CreateStyleFont(object->style, transform.scale);
+    const pf::font_handle font = CreateStyleFont(object->style, transform.scale);
     if (!font) return;
 
-    HGDIOBJ previous = ::SelectObject(dc, font);
+    auto context = pf::create_pixel_surface_context(canvas.Surface());
+    if (!context) {
+        pf::delete_font_handle(font);
+        return;
+    }
+    const auto full = context->measure_text_h(pf::utf16_to_utf8(object->text), font);
+    const auto prefix = context->measure_text_h(
+        pf::utf16_to_utf8(object->text.substr(0, caret_)), font);
+    const int lineHeight = pf::line_height_for_font(font);
+    pf::delete_font_handle(font);
 
-    SIZE full{};
-    ::GetTextExtentPoint32W(dc, object->text.c_str(), static_cast<int>(object->text.size()),
-                            &full);
-    SIZE prefix{};
-    ::GetTextExtentPoint32W(dc, object->text.c_str(), static_cast<int>(caret_), &prefix);
-    TEXTMETRICW metrics{};
-    ::GetTextMetricsW(dc, &metrics);
-
-    ::SelectObject(dc, previous);
-    ::DeleteObject(font);
-
-    const RECT label = LabelRect(*object, transform);
+    const Rect label = LabelRect(*object, transform);
     const float centreX = (label.left + label.right) * 0.5f;
     const float centreY = (label.top + label.bottom) * 0.5f;
     const float x = centreX - full.cx * 0.5f + prefix.cx;
-    const float half = metrics.tmHeight * 0.5f;
+    const float half = lineHeight * 0.5f;
 
-    renderer.FillRect({x, centreY - half, x + ui::ScaleF(hwnd_, 1.5f), centreY + half},
+    renderer.FillRect({x, centreY - half, x + ui::ScaleF(dpiScale_, 1.5f), centreY + half},
                       ui::Argb(object->style.textColour));
 }
 
 View::ZoomBadge View::BadgeLayout() const {
-    RECT client{};
-    ::GetClientRect(hwnd_, &client);
+    const Rect client{0, 0, viewport_.cx, viewport_.cy};
 
-    const int margin = ui::Scale(hwnd_, 10);
-    const int height = ui::Scale(hwnd_, 24);
-    const int button = ui::Scale(hwnd_, 26);
-    const int label = ui::Scale(hwnd_, 52);
+    const int margin = ui::Scale(dpiScale_, 10);
+    const int height = ui::Scale(dpiScale_, 24);
+    const int button = ui::Scale(dpiScale_, 26);
+    const int label = ui::Scale(dpiScale_, 52);
 
     ZoomBadge badge;
-    badge.bounds = RECT{margin, client.bottom - margin - height, margin + button * 2 + label,
+    badge.bounds = Rect{margin, client.bottom - margin - height, margin + button * 2 + label,
                         client.bottom - margin};
-    badge.minus = RECT{badge.bounds.left, badge.bounds.top, badge.bounds.left + button,
+    badge.minus = Rect{badge.bounds.left, badge.bounds.top, badge.bounds.left + button,
                        badge.bounds.bottom};
-    badge.label = RECT{badge.minus.right, badge.bounds.top, badge.minus.right + label,
+    badge.label = Rect{badge.minus.right, badge.bounds.top, badge.minus.right + label,
                        badge.bounds.bottom};
-    badge.plus = RECT{badge.label.right, badge.bounds.top, badge.bounds.right,
+    badge.plus = Rect{badge.label.right, badge.bounds.top, badge.bounds.right,
                       badge.bounds.bottom};
     return badge;
 }
 
-void View::DrawZoomBadge(Renderer& renderer, HDC dc) const {
+void View::DrawZoomBadge(Renderer& renderer, Canvas& canvas) const {
     const ZoomBadge badge = BadgeLayout();
     const RectF bounds = RectF::FromRect(badge.bounds);
-    const float radius = ui::ScaleF(hwnd_, 5.0f);
+    const float radius = ui::ScaleF(dpiScale_, 5.0f);
 
     ui::FillRoundRect(renderer, bounds, radius, ui::kPanel, 235);
     ui::FrameRoundRect(renderer, bounds.Inflated(-0.5f), radius, ui::kBorder, 1.0f);
 
-    const float arm = ui::ScaleF(hwnd_, 4.5f);
+    const float arm = ui::ScaleF(dpiScale_, 4.5f);
     const Vec2 minus = RectF::FromRect(badge.minus).Centre();
     ui::Line(renderer, {minus.x - arm, minus.y}, {minus.x + arm, minus.y}, ui::kText, 1.4f);
 
@@ -457,29 +430,24 @@ void View::DrawZoomBadge(Renderer& renderer, HDC dc) const {
     ui::Line(renderer, {plus.x, plus.y - arm}, {plus.x, plus.y + arm}, ui::kText, 1.4f);
 
     const auto percent = static_cast<int>(std::lround(zoom_ * 100.0f));
-    ui::Text(dc, badge.label, std::to_wstring(percent) + L"%", ui::kText,
-             DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX, ui::Font(hwnd_));
+    ui::Text(canvas, badge.label, std::to_wstring(percent) + L"%", ui::kText,
+             ui::TextAlign::center, ui::Font(dpiScale_));
 }
 
-void View::Render(Renderer& renderer, HDC dc, const RECT& dirty) const {
+void View::Render(Renderer& renderer, Canvas& canvas) const {
     renderer.Clear(ui::Argb(ui::kWorkspace));
 
     const Transform transform = GetTransform();
     DrawPage(renderer, transform);
 
-    const int saved = ::SaveDC(dc);
-    ::IntersectClipRect(dc, dirty.left, dirty.top, dirty.right, dirty.bottom);
-    document_->Draw(renderer, dc, transform, editing_);
+    document_->Draw(renderer, canvas, transform, editing_);
 
     if (document_->Objects().empty()) {
         // Centred on what the user can actually see, not on the page.
-        RECT hint{};
-        ::GetClientRect(hwnd_, &hint);
-        ui::Text(dc, hint, L"Pick a shape on the left, then click or drag here", ui::kTextDim,
-                 DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX, ui::Font(hwnd_));
+        const Rect hint{0, 0, viewport_.cx, viewport_.cy};
+        ui::Text(canvas, hint, L"Pick a shape on the left, then click or drag here", ui::kTextDim,
+                 ui::TextAlign::center, ui::Font(dpiScale_));
     }
-
-    ::RestoreDC(dc, saved);
 
     DrawSelection(renderer, transform);
 
@@ -489,18 +457,14 @@ void View::Render(Renderer& renderer, HDC dc, const RECT& dirty) const {
         ui::FrameRoundRect(renderer, band, 0.0f, ui::kAccent, 1.0f);
     }
 
-    if (editing_ != ObjectId::None && caretVisible_) DrawCaret(renderer, dc, transform);
+    if (editing_ != ObjectId::None && caretVisible_) DrawCaret(renderer, canvas, transform);
 
-    DrawZoomBadge(renderer, dc);
+    DrawZoomBadge(renderer, canvas);
 }
 
-void View::OnPaint() {
-    PAINTSTRUCT ps{};
-    if (surface_.Begin(hwnd_, ps)) Render(surface_.GetRenderer(), surface_.Dc(), ps.rcPaint);
-    surface_.End(hwnd_, ps);
+void View::Invalidate() const {
+    if (onInvalidate) onInvalidate();
 }
-
-void View::Invalidate() const { ::InvalidateRect(hwnd_, nullptr, FALSE); }
 
 void View::Changed() {
     if (onChanged) onChanged();
@@ -511,38 +475,18 @@ void View::Changed() {
 void View::UpdateScrollBars() {
     const Transform transform = GetTransform();
     const Size page = document_->PageSize();
-    const long margin = ui::Scale(hwnd_, kPageMargin);
+    const auto margin = ui::Scale(dpiScale_, kPageMargin);
 
-    extent_ = Size(static_cast<long>(page.cx * transform.scale) + margin * 2,
-                   static_cast<long>(page.cy * transform.scale) + margin * 2);
+    extent_ = Size(static_cast<std::int32_t>(page.cx * transform.scale) + margin * 2,
+                   static_cast<std::int32_t>(page.cy * transform.scale) + margin * 2);
 
-    RECT client{};
-    ::GetClientRect(hwnd_, &client);
-
-    scroll_.x = (std::clamp)(scroll_.x, 0L, (std::max)(0L, extent_.cx - client.right));
-    scroll_.y = (std::clamp)(scroll_.y, 0L, (std::max)(0L, extent_.cy - client.bottom));
-
-    SCROLLINFO info{};
-    info.cbSize = sizeof(info);
-    info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-
-    info.nMax = (std::max)(0L, extent_.cx - 1);
-    info.nPage = static_cast<UINT>((std::max)(0L, client.right));
-    info.nPos = scroll_.x;
-    ::SetScrollInfo(hwnd_, SB_HORZ, &info, TRUE);
-
-    info.nMax = (std::max)(0L, extent_.cy - 1);
-    info.nPage = static_cast<UINT>((std::max)(0L, client.bottom));
-    info.nPos = scroll_.y;
-    ::SetScrollInfo(hwnd_, SB_VERT, &info, TRUE);
+    scroll_.x = (std::clamp)(scroll_.x, 0, (std::max)(0, extent_.cx - viewport_.cx));
+    scroll_.y = (std::clamp)(scroll_.y, 0, (std::max)(0, extent_.cy - viewport_.cy));
 }
 
 void View::ScrollTo(Point scroll) {
-    RECT client{};
-    ::GetClientRect(hwnd_, &client);
-
-    scroll.x = (std::clamp)(scroll.x, 0L, (std::max)(0L, extent_.cx - client.right));
-    scroll.y = (std::clamp)(scroll.y, 0L, (std::max)(0L, extent_.cy - client.bottom));
+    scroll.x = (std::clamp)(scroll.x, 0, (std::max)(0, extent_.cx - viewport_.cx));
+    scroll.y = (std::clamp)(scroll.y, 0, (std::max)(0, extent_.cy - viewport_.cy));
     if (scroll == scroll_) return;
 
     scroll_ = scroll;
@@ -550,7 +494,7 @@ void View::ScrollTo(Point scroll) {
     Invalidate();
 }
 
-void View::SetZoom(float zoom, POINT anchor) {
+void View::SetZoom(float zoom, Point anchor) {
     zoom = (std::clamp)(zoom, kMinZoom, kMaxZoom);
     if (std::fabs(zoom - zoom_) < 1e-4f) return;
 
@@ -569,69 +513,33 @@ void View::SetZoom(float zoom, POINT anchor) {
 }
 
 void View::ZoomBy(float factor) {
-    RECT client{};
-    ::GetClientRect(hwnd_, &client);
-    SetZoom(zoom_ * factor, POINT{client.right / 2, client.bottom / 2});
+    const Rect client{0, 0, viewport_.cx, viewport_.cy};
+    SetZoom(zoom_ * factor, Point{client.right / 2, client.bottom / 2});
 }
 
 void View::ZoomToFit() {
-    RECT client{};
-    ::GetClientRect(hwnd_, &client);
+    const Rect client{0, 0, viewport_.cx, viewport_.cy};
 
     const Size page = document_->PageSize();
-    const float base = static_cast<float>(ui::Dpi(hwnd_)) / 100.0f;
-    const float margin = ui::ScaleF(hwnd_, static_cast<float>(kPageMargin)) * 2.0f;
+    const float base = static_cast<float>(dpiScale_ * 96.0 / 100.0);
+    const float margin = ui::ScaleF(dpiScale_, static_cast<float>(kPageMargin)) * 2.0f;
 
     const float available = (std::max)(1.0f, static_cast<float>(client.right) - margin);
     const float availableY = (std::max)(1.0f, static_cast<float>(client.bottom) - margin);
 
     SetZoom((std::min)(available / (page.cx * base), availableY / (page.cy * base)),
-            POINT{client.right / 2, client.bottom / 2});
+            Point{client.right / 2, client.bottom / 2});
 }
 
-void View::OnSize() {
-    UpdateScrollBars();
-    Invalidate();
-}
-
-void View::OnScroll(int bar, WPARAM wParam) {
-    SCROLLINFO info{};
-    info.cbSize = sizeof(info);
-    info.fMask = SIF_ALL;
-    ::GetScrollInfo(hwnd_, bar, &info);
-
-    int position = info.nPos;
-    const int line = ui::Scale(hwnd_, 24);
-    const int page = static_cast<int>(info.nPage);
-
-    switch (LOWORD(wParam)) {
-        case SB_LINEUP: position -= line; break;
-        case SB_LINEDOWN: position += line; break;
-        case SB_PAGEUP: position -= page; break;
-        case SB_PAGEDOWN: position += page; break;
-        case SB_THUMBTRACK:
-        case SB_THUMBPOSITION: position = info.nTrackPos; break;
-        case SB_TOP: position = info.nMin; break;
-        case SB_BOTTOM: position = info.nMax; break;
-        default: return;
-    }
-
-    Point target = scroll_;
-    (bar == SB_HORZ ? target.x : target.y) = position;
-    ScrollTo(target);
-}
-
-void View::OnMouseWheel(POINT screenPoint, int delta, UINT flags) {
-    if (flags & MK_CONTROL) {
-        POINT client = screenPoint;
-        ::ScreenToClient(hwnd_, &client);
-        SetZoom(zoom_ * std::pow(kZoomStep, static_cast<float>(delta) / WHEEL_DELTA), client);
+void View::OnMouseWheel(const Point point, const int delta, const bool control, const bool shift) {
+    if (control) {
+        SetZoom(zoom_ * std::pow(kZoomStep, static_cast<float>(delta) / 120.0f), point);
         return;
     }
 
     Point target = scroll_;
-    const long step = delta * ui::Scale(hwnd_, 60) / WHEEL_DELTA;
-    if (flags & MK_SHIFT)
+    const long step = delta * ui::Scale(dpiScale_, 60) / 120;
+    if (shift)
         target.x -= step;
     else
         target.y -= step;
@@ -650,40 +558,25 @@ void View::Copy() {
     }
 
     const std::string text = ObjectsToJson(clones).Dump();
-
-    HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE, text.size() + 1);
-    if (!memory) return;
-
-    if (void* target = ::GlobalLock(memory)) {
-        std::memcpy(target, text.c_str(), text.size() + 1);
-        ::GlobalUnlock(memory);
-    }
-
-    if (::OpenClipboard(hwnd_)) {
-        ::EmptyClipboard();
-        if (!::SetClipboardData(DrawClipboardFormat(), memory)) ::GlobalFree(memory);
-        ::CloseClipboard();
-    } else {
-        ::GlobalFree(memory);
-    }
+    if (frame_) frame_->text_to_clipboard(text);
 }
 
 bool View::ClipboardHasObjects() const {
-    return ::IsClipboardFormatAvailable(DrawClipboardFormat()) != FALSE;
+    if (!frame_) return false;
+    const std::string text = frame_->text_from_clipboard();
+    if (text.empty()) return false;
+    try {
+        return Json::Parse(text).IsArray();
+    } catch (const FileError&) {
+        return false;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
 }
 
 void View::Paste() {
-    if (!::OpenClipboard(hwnd_)) return;
-
-    std::string text;
-    if (HANDLE handle = ::GetClipboardData(DrawClipboardFormat())) {
-        const SIZE_T size = ::GlobalSize(handle);
-        if (const char* source = static_cast<const char*>(::GlobalLock(handle))) {
-            text.assign(source, ::strnlen(source, size));
-            ::GlobalUnlock(handle);
-        }
-    }
-    ::CloseClipboard();
+    if (!frame_) return;
+    const std::string text = frame_->text_from_clipboard();
     if (text.empty()) return;
 
     Document::ObjectList pasted;
@@ -707,7 +600,7 @@ void View::Paste() {
 
 // -------------------------------------------------------------- interaction
 
-void View::CreateAt(ShapeKind kind, POINT clientPoint) {
+void View::CreateAt(ShapeKind kind, Point clientPoint) {
     Style style = style_;
     if (IsLinear(kind)) {
         style.hasFill = false;
@@ -725,20 +618,24 @@ void View::CreateAt(ShapeKind kind, POINT clientPoint) {
     Invalidate();
 }
 
-void View::OnLeftDown(POINT point, UINT flags) {
-    ::SetFocus(hwnd_);
+void View::OnLeftDown(const Point point, const bool shift, const bool control, const bool alt) {
+    shiftHeld_ = shift;
+    altHeld_ = alt;
 
     const ZoomBadge badge = BadgeLayout();
-    if (::PtInRect(&badge.minus, point)) {
+    if (point.x >= badge.minus.left && point.x < badge.minus.right &&
+        point.y >= badge.minus.top && point.y < badge.minus.bottom) {
         ZoomBy(1.0f / kZoomStep);
         return;
     }
-    if (::PtInRect(&badge.plus, point)) {
+    if (point.x >= badge.plus.left && point.x < badge.plus.right &&
+        point.y >= badge.plus.top && point.y < badge.plus.bottom) {
         ZoomBy(kZoomStep);
         return;
     }
-    if (::PtInRect(&badge.label, point)) {
-        SetZoom(1.0f, POINT{badge.label.left, badge.label.top});
+    if (point.x >= badge.label.left && point.x < badge.label.right &&
+        point.y >= badge.label.top && point.y < badge.label.bottom) {
+        SetZoom(1.0f, Point{badge.label.left, badge.label.top});
         return;
     }
 
@@ -784,7 +681,8 @@ void View::OnLeftDown(POINT point, UINT flags) {
         dragHandle_ = linear ? 1 : 4;
         dragStart_ = bounds;
         dragOrigin_ = start;
-        ::SetCapture(hwnd_);
+        captured_ = true;
+        if (onCapture) onCapture(true);
         Invalidate();
         Changed();
         return;
@@ -800,13 +698,14 @@ void View::OnLeftDown(POINT point, UINT flags) {
             drag_ = Drag::Resize;
             dragHandle_ = handle;
             dragStart_ = object->position;
-            ::SetCapture(hwnd_);
+            captured_ = true;
+            if (onCapture) onCapture(true);
             return;
         }
     }
 
     if (const ObjectId hit = document_->ObjectAt(local, HitTolerance()); hit != ObjectId::None) {
-        const bool add = (flags & MK_SHIFT) != 0;
+        const bool add = shift;
         const bool selected = IsSelected(hit);
 
         if (add && selected)
@@ -817,45 +716,61 @@ void View::OnLeftDown(POINT point, UINT flags) {
         if (!selection_.empty()) {
             document_->BeginChange();
             dragChange_ = true;
-            if (flags & MK_CONTROL) DuplicateSelection();
+            if (control) DuplicateSelection();
             drag_ = Drag::Move;
             if (const DrawObj* primary = Primary()) dragStart_ = primary->position;
-            ::SetCapture(hwnd_);
+            captured_ = true;
+            if (onCapture) onCapture(true);
         }
         Invalidate();
         Changed();
         return;
     }
 
-    if ((flags & MK_SHIFT) == 0) ClearSelection();
+    if (!shift) ClearSelection();
     drag_ = Drag::Band;
     bandActive_ = true;
     band_ = Rect(point.x, point.y, point.x, point.y);
-    ::SetCapture(hwnd_);
+    captured_ = true;
+    if (onCapture) onCapture(true);
 }
 
-void View::OnMouseMove(POINT point, UINT flags) {
+void View::SetCursor(const pf::cursor_shape cursor) const {
+    if (onCursor) onCursor(cursor);
+}
+
+void View::OnMouseMove(const Point point, const bool shift, const bool control, const bool alt) {
+    (void)control;
+    shiftHeld_ = shift;
+    altHeld_ = alt;
     const Point local = ToDoc(point);
 
     if (drag_ == Drag::None) {
-        HCURSOR cursor = ::LoadCursorW(nullptr, IDC_ARROW);
+        pf::cursor_shape cursor = pf::cursor_shape::arrow;
         if (tool_.kind == Tool::Kind::Text) {
-            cursor = ::LoadCursorW(nullptr, IDC_IBEAM);
+            cursor = pf::cursor_shape::ibeam;
         } else if (tool_.kind == Tool::Kind::Shape) {
-            cursor = ::LoadCursorW(nullptr, IDC_CROSS);
+            cursor = pf::cursor_shape::hand;
         } else {
             const DrawObj* primary = selection_.size() == 1 ? Primary() : nullptr;
             const int handle = primary ? HandleAt(*primary, local) : -1;
-            if (handle >= 0)
-                cursor = primary->HandleCursor(handle);
-            else if (IsSelected(document_->ObjectAt(local, HitTolerance())))
-                cursor = ::LoadCursorW(nullptr, IDC_SIZEALL);
+            if (handle >= 0) {
+                cursor = (handle == 1 || handle == 5)
+                              ? pf::cursor_shape::size_ns
+                              : (handle == 3 || handle == 7)
+                                    ? pf::cursor_shape::size_we
+                                    : pf::cursor_shape::hand;
+            } else if (IsSelected(document_->ObjectAt(local, HitTolerance()))) {
+                cursor = pf::cursor_shape::hand;
+            }
         }
 
         const ZoomBadge badge = BadgeLayout();
-        if (::PtInRect(&badge.bounds, point)) cursor = ::LoadCursorW(nullptr, IDC_HAND);
+        if (point.x >= badge.bounds.left && point.x < badge.bounds.right &&
+            point.y >= badge.bounds.top && point.y < badge.bounds.bottom)
+            cursor = pf::cursor_shape::hand;
 
-        ::SetCursor(cursor);
+        SetCursor(cursor);
         return;
     }
 
@@ -867,7 +782,7 @@ void View::OnMouseMove(POINT point, UINT flags) {
             break;
 
         case Drag::Move: {
-            ::SetCursor(::LoadCursorW(nullptr, IDC_SIZEALL));
+            SetCursor(pf::cursor_shape::hand);
 
             const DrawObj* primary = Primary();
             if (!primary) break;
@@ -889,11 +804,15 @@ void View::OnMouseMove(POINT point, UINT flags) {
             DrawObj* primary = Primary();
             if (!primary) break;
 
-            ::SetCursor(primary->HandleCursor(dragHandle_));
+            SetCursor((dragHandle_ == 1 || dragHandle_ == 5)
+                          ? pf::cursor_shape::size_ns
+                          : (dragHandle_ == 3 || dragHandle_ == 7)
+                                ? pf::cursor_shape::size_we
+                                : pf::cursor_shape::hand);
 
             Point target = Snap(local);
             // Shift keeps a shape square, pivoting on the opposite corner.
-            if ((flags & MK_SHIFT) && !IsLinear(primary->kind))
+            if (shift && !IsLinear(primary->kind))
                 target = SquareCornerTarget(dragStart_, dragHandle_, target);
             primary->MoveHandle(dragHandle_, target);
             Invalidate();
@@ -904,30 +823,24 @@ void View::OnMouseMove(POINT point, UINT flags) {
     }
 }
 
-std::size_t View::CaretIndexAt(POINT clientPoint) const {
+std::size_t View::CaretIndexAt(const Point clientPoint) const {
     const DrawObj* object = Find(editing_);
     if (!object || object->text.empty()) return 0;
 
     const Transform transform = GetTransform();
-    HDC dc = ::GetDC(hwnd_);
-    if (!dc) return object->text.size();
+    const pf::font_handle font = CreateStyleFont(object->style, transform.scale);
+    if (!font) return object->text.size();
+    const auto full = pf::measure_text_with_font(font, pf::utf16_to_utf8(object->text));
 
-    HFONT font = CreateStyleFont(object->style, transform.scale);
-    HGDIOBJ previous = ::SelectObject(dc, font);
-
-    SIZE full{};
-    ::GetTextExtentPoint32W(dc, object->text.c_str(), static_cast<int>(object->text.size()),
-                            &full);
-
-    const RECT label = LabelRect(*object, transform);
+    const Rect label = LabelRect(*object, transform);
     const int origin = (label.left + label.right) / 2 - full.cx / 2;
 
     std::size_t best = 0;
     int bestDistance = std::abs(clientPoint.x - origin);
     for (std::size_t i = 1; i <= object->text.size(); ++i) {
         if (!IsCaretStop(object->text, i)) continue;
-        SIZE prefix{};
-        ::GetTextExtentPoint32W(dc, object->text.c_str(), static_cast<int>(i), &prefix);
+        const auto prefix = pf::measure_text_with_font(
+            font, pf::utf16_to_utf8(object->text.substr(0, i)));
         const int distance = std::abs(clientPoint.x - (origin + prefix.cx));
         if (distance < bestDistance) {
             bestDistance = distance;
@@ -935,9 +848,7 @@ std::size_t View::CaretIndexAt(POINT clientPoint) const {
         }
     }
 
-    ::SelectObject(dc, previous);
-    ::DeleteObject(font);
-    ::ReleaseDC(hwnd_, dc);
+    pf::delete_font_handle(font);
     return best;
 }
 
@@ -947,12 +858,15 @@ void View::EndDragChange() {
     document_->CommitChange();
 }
 
-void View::OnLeftUp(POINT point, UINT flags) {
-    // Snapshot first: ReleaseCapture delivers WM_CAPTURECHANGED synchronously,
-    // which clears the drag state.
+void View::OnLeftUp(const Point point, const bool shift, const bool control, const bool alt) {
+    shiftHeld_ = shift;
+    altHeld_ = alt;
     const Drag drag = drag_;
     drag_ = Drag::None;
-    if (::GetCapture() == hwnd_) ::ReleaseCapture();
+    if (captured_) {
+        captured_ = false;
+        if (onCapture) onCapture(false);
+    }
 
     if (drag == Drag::Band) {
         bandActive_ = false;
@@ -997,15 +911,16 @@ void View::OnLeftUp(POINT point, UINT flags) {
     EndDragChange();
     if (drag != Drag::None) Changed();
 
-    OnMouseMove(point, flags);
+    OnMouseMove(point, shift, control, alt);
 }
 
-void View::OnDoubleClick(POINT point, UINT flags) {
+void View::OnDoubleClick(const Point point, const bool shift, const bool control, const bool alt) {
     // The zoom badge holds buttons: a quick second click on one is another
     // step, not a double-click on whatever lies underneath.
     const ZoomBadge badge = BadgeLayout();
-    if (::PtInRect(&badge.bounds, point)) {
-        OnLeftDown(point, flags);
+    if (point.x >= badge.bounds.left && point.x < badge.bounds.right &&
+        point.y >= badge.bounds.top && point.y < badge.bounds.bottom) {
+        OnLeftDown(point, shift, control, alt);
         return;
     }
 
@@ -1026,14 +941,14 @@ void View::BeginEditing(ObjectId id) {
     editing_ = id;
     caret_ = Find(id)->text.size();
     caretVisible_ = true;
-    ::SetTimer(hwnd_, kCaretTimer, ::GetCaretBlinkTime(), nullptr);
+    if (frame_) frame_->set_timer(kCaretTimer, 500);
     Invalidate();
 }
 
 void View::EndEditing() {
     if (editing_ == ObjectId::None) return;
 
-    ::KillTimer(hwnd_, kCaretTimer);
+    if (frame_) frame_->kill_timer(kCaretTimer);
     editing_ = ObjectId::None;
 
     if (textChange_) {
@@ -1047,7 +962,7 @@ void View::EndEditing() {
 
 void View::FinishEditing() { EndEditing(); }
 
-void View::OnChar(wchar_t character) {
+void View::OnChar(const char32_t character) {
     DrawObj* object = Find(editing_);
     if (!object) return;
 
@@ -1059,9 +974,16 @@ void View::OnChar(wchar_t character) {
     } else if (character == L'\r' || character == L'\n' || character == L'\t') {
         EndEditing();
         return;
-    } else if (character >= L' ') {
-        object->text.insert(caret_, 1, character);
-        ++caret_;
+    } else if (character >= U' ') {
+        std::wstring inserted;
+        if (character <= 0xffff) {
+            inserted.push_back(static_cast<wchar_t>(character));
+        } else {
+            inserted.push_back(static_cast<wchar_t>((character >> 10) + 0xd7c0));
+            inserted.push_back(static_cast<wchar_t>((character & 0x3ff) + 0xdc00));
+        }
+        object->text.insert(caret_, inserted);
+        caret_ += inserted.size();
     } else {
         return;
     }
@@ -1070,15 +992,15 @@ void View::OnChar(wchar_t character) {
     Invalidate();
 }
 
-void View::OnKeyDown(WPARAM key) {
+void View::OnKeyDown(const unsigned int key, const bool shift) {
     if (DrawObj* object = Find(editing_)) {
         switch (key) {
-            case VK_ESCAPE: EndEditing(); return;
-            case VK_LEFT: caret_ = PreviousCaretStop(object->text, caret_); break;
-            case VK_RIGHT: caret_ = NextCaretStop(object->text, caret_); break;
-            case VK_HOME: caret_ = 0; break;
-            case VK_END: caret_ = object->text.size(); break;
-            case VK_DELETE:
+            case pf::platform_key::Escape: EndEditing(); return;
+            case pf::platform_key::Left: caret_ = PreviousCaretStop(object->text, caret_); break;
+            case pf::platform_key::Right: caret_ = NextCaretStop(object->text, caret_); break;
+            case pf::platform_key::Home: caret_ = 0; break;
+            case pf::platform_key::End: caret_ = object->text.size(); break;
+            case pf::platform_key::Delete:
                 if (caret_ < object->text.size())
                     object->text.erase(caret_, NextCaretStop(object->text, caret_) - caret_);
                 break;
@@ -1089,50 +1011,32 @@ void View::OnKeyDown(WPARAM key) {
         return;
     }
 
-    const long step = (::GetKeyState(VK_SHIFT) & 0x8000) ? 1 : kMinorGrid;
+    const long step = shift ? 1 : kMinorGrid;
     switch (key) {
-        case VK_ESCAPE: OnCommand(ID_CANCEL); break;
-        case VK_LEFT: NudgeSelection(-step, 0); break;
-        case VK_RIGHT: NudgeSelection(step, 0); break;
-        case VK_UP: NudgeSelection(0, step); break;
-        case VK_DOWN: NudgeSelection(0, -step); break;
-        case VK_F2:
+        case pf::platform_key::Escape: OnCommand(ID_CANCEL); break;
+        case pf::platform_key::Left: NudgeSelection(-step, 0); break;
+        case pf::platform_key::Right: NudgeSelection(step, 0); break;
+        case pf::platform_key::Up: NudgeSelection(0, step); break;
+        case pf::platform_key::Down: NudgeSelection(0, -step); break;
+        case pf::platform_key::F2:
             if (selection_.size() == 1) BeginEditing(selection_.front());
             break;
         default: break;
     }
 }
 
-void View::OnContextMenu(POINT screenPoint) {
-    if (screenPoint.x == -1 && screenPoint.y == -1) {
-        // Shift+F10 and the menu key report no position: open the menu on the
-        // selection, or in the middle of the view when nothing is selected.
-        RECT client{};
-        ::GetClientRect(hwnd_, &client);
-        POINT anchor{client.right / 2, client.bottom / 2};
-        if (const DrawObj* object = Primary()) {
-            const Vec2 centre = GetTransform().ToDevice(object->Bounds()).Centre();
-            anchor.x = (std::clamp)(static_cast<LONG>(centre.x), client.left, client.right);
-            anchor.y = (std::clamp)(static_cast<LONG>(centre.y), client.top, client.bottom);
-        }
-        screenPoint = anchor;
-        ::ClientToScreen(hwnd_, &screenPoint);
-    } else {
-        POINT client = screenPoint;
-        ::ScreenToClient(hwnd_, &client);
-
-        const ObjectId hit = document_->ObjectAt(ToDoc(client), HitTolerance());
+void View::OnContextMenu(const Point point) {
+    if (point.x >= 0 && point.y >= 0) {
+        const ObjectId hit = document_->ObjectAt(ToDoc(point), HitTolerance());
         if (hit != ObjectId::None && !IsSelected(hit)) Select(hit, false);
     }
+    if (onContextMenuRequested) onContextMenuRequested();
+}
 
-    HMENU menu = ::LoadMenuW(::GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDR_CONTEXT_MENU));
-    if (!menu) return;
-
-    if (HMENU popup = ::GetSubMenu(menu, 0)) {
-        ::TrackPopupMenu(popup, TPM_RIGHTBUTTON | TPM_LEFTALIGN, screenPoint.x, screenPoint.y, 0,
-                         ::GetParent(hwnd_), nullptr);
-    }
-    ::DestroyMenu(menu);
+void View::OnTimer(const unsigned int id) {
+    if (id != kCaretTimer || editing_ == ObjectId::None) return;
+    caretVisible_ = !caretVisible_;
+    Invalidate();
 }
 
 // ---------------------------------------------------------------- commands
@@ -1141,7 +1045,7 @@ bool View::OnCommand(int id) {
     // While a label is being typed the edit commands belong to the text.
     if (editing_ != ObjectId::None) {
         switch (id) {
-            case ID_EDIT_CLEAR: OnKeyDown(VK_DELETE); return true;
+            case ID_EDIT_CLEAR: OnKeyDown(pf::platform_key::Delete, false); return true;
             case ID_EDIT_CUT:
             case ID_EDIT_PASTE:
             case ID_EDIT_DUPLICATE:
@@ -1192,22 +1096,20 @@ bool View::OnCommand(int id) {
         case ID_VIEW_ZOOM_OUT: ZoomBy(1.0f / kZoomStep); return true;
         case ID_VIEW_ZOOM_FIT: ZoomToFit(); return true;
         case ID_VIEW_ZOOM_ACTUAL: {
-            RECT client{};
-            ::GetClientRect(hwnd_, &client);
-            SetZoom(1.0f, POINT{client.right / 2, client.bottom / 2});
+            const Rect client{0, 0, viewport_.cx, viewport_.cy};
+            SetZoom(1.0f, Point{client.right / 2, client.bottom / 2});
             return true;
         }
 
         case ID_VIEW_PAPER_COLOUR: {
-            RECT anchor{};
-            ::GetWindowRect(hwnd_, &anchor);
-            anchor.bottom = anchor.top + 1;
-            if (auto colour = PickColour(hwnd_, anchor, document_->PaperColour())) {
-                document_->BeginChange();
-                document_->SetPaperColour(*colour);
-                document_->CommitChange();
-                Invalidate();
-                Changed();
+            if (onPickColour) {
+                if (auto colour = onPickColour(document_->PaperColour())) {
+                    document_->BeginChange();
+                    document_->SetPaperColour(*colour);
+                    document_->CommitChange();
+                    Invalidate();
+                    Changed();
+                }
             }
             return true;
         }
@@ -1244,7 +1146,10 @@ bool View::OnCommand(int id) {
 
         case ID_CANCEL:
             EndEditing();
-            if (::GetCapture() == hwnd_) ::ReleaseCapture();
+            if (captured_) {
+                captured_ = false;
+                if (onCapture) onCapture(false);
+            }
             drag_ = Drag::None;
             EndDragChange();
             bandActive_ = false;
@@ -1324,151 +1229,4 @@ bool View::ExportPng(const std::filesystem::path& path) const {
         return false;
     }
     return true;
-}
-
-void View::Print(HDC printerDc) const {
-    Canvas canvas;
-    if (!RenderDocumentToCanvas(*document_, canvas, kPrintDpi)) return;
-
-    const int printerWidth = ::GetDeviceCaps(printerDc, HORZRES);
-    const int printerHeight = ::GetDeviceCaps(printerDc, VERTRES);
-
-    // Fit the page to the printable area, preserving the aspect ratio.
-    const double scale = (std::min)(static_cast<double>(printerWidth) / canvas.Width(),
-                                    static_cast<double>(printerHeight) / canvas.Height());
-    const int width = static_cast<int>(canvas.Width() * scale);
-    const int height = static_cast<int>(canvas.Height() * scale);
-
-    BITMAPINFO info{};
-    info.bmiHeader.biSize = sizeof(info.bmiHeader);
-    info.bmiHeader.biWidth = canvas.Width();
-    info.bmiHeader.biHeight = -canvas.Height();  // negative: top-down rows
-    info.bmiHeader.biPlanes = 1;
-    info.bmiHeader.biBitCount = 32;
-    info.bmiHeader.biCompression = BI_RGB;
-
-    // Printer drivers handle StretchDIBits far more reliably than a blit from
-    // a memory DC.
-    ::SetStretchBltMode(printerDc, HALFTONE);
-    ::StretchDIBits(printerDc, (printerWidth - width) / 2, (printerHeight - height) / 2, width,
-                    height, 0, 0, canvas.Width(), canvas.Height(), canvas.Pixels(), &info,
-                    DIB_RGB_COLORS, SRCCOPY);
-}
-
-// -------------------------------------------------------------- window proc
-
-LRESULT CALLBACK View::WndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-    View* view = FromHandle(window);
-
-    switch (message) {
-        case WM_CREATE: {
-            auto* self = new View(window, std::make_unique<Document>());
-            ::SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
-            self->UpdateScrollBars();
-            return 0;
-        }
-
-        case WM_DESTROY:
-            ::SetWindowLongPtrW(window, GWLP_USERDATA, 0);
-            delete view;
-            return 0;
-
-        case WM_ERASEBKGND: return 1;
-
-        case WM_PAINT:
-            if (view) view->OnPaint();
-            return 0;
-
-        case WM_SIZE:
-            if (view) view->OnSize();
-            return 0;
-
-        case WM_DPICHANGED_AFTERPARENT:
-            if (view) {
-                view->UpdateScrollBars();
-                view->Invalidate();
-            }
-            return 0;
-
-        case WM_HSCROLL:
-            if (view) view->OnScroll(SB_HORZ, wParam);
-            return 0;
-
-        case WM_VSCROLL:
-            if (view) view->OnScroll(SB_VERT, wParam);
-            return 0;
-
-        case WM_MOUSEWHEEL:
-            if (view)
-                view->OnMouseWheel({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
-                                   GET_WHEEL_DELTA_WPARAM(wParam), GET_KEYSTATE_WPARAM(wParam));
-            return 0;
-
-        case WM_SETCURSOR:
-            if (LOWORD(lParam) == HTCLIENT) return TRUE;
-            break;
-
-        case WM_LBUTTONDOWN:
-            if (view)
-                view->OnLeftDown({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
-                                 static_cast<UINT>(wParam));
-            return 0;
-
-        case WM_LBUTTONUP:
-            if (view)
-                view->OnLeftUp({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
-                               static_cast<UINT>(wParam));
-            return 0;
-
-        case WM_LBUTTONDBLCLK:
-            if (view)
-                view->OnDoubleClick({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
-                                    static_cast<UINT>(wParam));
-            return 0;
-
-        case WM_MOUSEMOVE:
-            if (view)
-                view->OnMouseMove({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
-                                  static_cast<UINT>(wParam));
-            return 0;
-
-        case WM_KEYDOWN:
-            if (view) view->OnKeyDown(wParam);
-            return 0;
-
-        case WM_CHAR:
-            if (view) view->OnChar(static_cast<wchar_t>(wParam));
-            return 0;
-
-        case WM_TIMER:
-            if (view && view->editing_ != ObjectId::None) {
-                view->caretVisible_ = !view->caretVisible_;
-                view->Invalidate();
-            }
-            return 0;
-
-        case WM_KILLFOCUS:
-            if (view) view->EndEditing();
-            return 0;
-
-        case WM_CONTEXTMENU:
-            if (view) {
-                view->OnContextMenu({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
-                return 0;
-            }
-            break;
-
-        case WM_CAPTURECHANGED:
-            if (view && view->drag_ != Drag::None) {
-                view->drag_ = Drag::None;
-                view->bandActive_ = false;
-                view->EndDragChange();
-                view->Invalidate();
-            }
-            return 0;
-
-        default: break;
-    }
-
-    return ::DefWindowProcW(window, message, wParam, lParam);
 }

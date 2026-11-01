@@ -6,8 +6,6 @@
 #include "json.h"
 #include "render.h"
 
-#include <windows.h>
-
 #include <array>
 #include <span>
 #include <string>
@@ -24,13 +22,13 @@ inline constexpr int kDashStyleCount = 4;
 
 struct Style {
     bool hasFill = true;
-    COLORREF fill = RGB(0xDC, 0xE9, 0xFB);
+    Color fill = Rgb(0xDC, 0xE9, 0xFB);
     bool gradient = false;
-    COLORREF fillEnd = RGB(0x8F, 0xB8, 0xE8);
+    Color fillEnd = Rgb(0x8F, 0xB8, 0xE8);
     GradientDirection gradientDirection = GradientDirection::Down;
 
     bool hasLine = true;
-    COLORREF line = RGB(0x1F, 0x4B, 0x7A);
+    Color line = Rgb(0x1F, 0x4B, 0x7A);
     int lineWidth = 2;  // 0.01 inch units, same as document coordinates
     DashStyle dash = DashStyle::Solid;
     bool roundJoins = true;
@@ -38,7 +36,7 @@ struct Style {
     bool startArrow = false;
     bool endArrow = false;
 
-    COLORREF textColour = RGB(0x1B, 0x1B, 0x1F);
+    Color textColour = Rgb(0x1B, 0x1B, 0x1F);
     int fontSize = 11;  // points
     bool bold = false;
     bool italic = false;
@@ -47,8 +45,8 @@ struct Style {
 };
 
 // Colours are stored in documents as "#rrggbb".
-std::string ColourToHex(COLORREF colour);
-COLORREF ColourFromHex(std::string_view text, COLORREF fallback);
+std::string ColourToHex(Color colour);
+Color ColourFromHex(std::string_view text, Color fallback);
 
 Json StyleToJson(const Style& style);
 Style StyleFromJson(const Json& json, const Style& fallback = {});

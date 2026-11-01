@@ -104,7 +104,7 @@ TEST(FillIsAntiAliasedAlongADiagonal) {
 TEST(ClippingLimitsWhatIsTouched) {
     Canvas canvas = MakeCanvas(40, 40, 0xFF000000);
     Renderer renderer(canvas);
-    renderer.SetClip(RECT{0, 0, 20, 40});
+    renderer.SetClip(Rect{0, 0, 20, 40});
 
     Path path;
     path.AddRect({0.0f, 0.0f, 40.0f, 40.0f});

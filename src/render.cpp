@@ -77,14 +77,16 @@ RectF RectF::Around(Vec2 a, Vec2 b) {
             (std::max)(a.y, b.y)};
 }
 
-RectF RectF::FromRect(const RECT& rect) {
+RectF RectF::FromRect(const Rect& rect) {
     return {static_cast<float>(rect.left), static_cast<float>(rect.top),
             static_cast<float>(rect.right), static_cast<float>(rect.bottom)};
 }
 
-RECT RectF::ToRect() const {
-    return RECT{static_cast<long>(std::floor(left)), static_cast<long>(std::floor(top)),
-                static_cast<long>(std::ceil(right)), static_cast<long>(std::ceil(bottom))};
+Rect RectF::ToRect() const {
+    return Rect{static_cast<std::int32_t>(std::floor(left)),
+                static_cast<std::int32_t>(std::floor(top)),
+                static_cast<std::int32_t>(std::ceil(right)),
+                static_cast<std::int32_t>(std::ceil(bottom))};
 }
 
 // ------------------------------------------------------------------- Path
@@ -413,14 +415,14 @@ void BuildStrokeOutline(const Path& path, const StrokeStyle& stroke, Path& out) 
 // --------------------------------------------------------------- Renderer
 
 Renderer::Renderer(Canvas& canvas) : canvas_(canvas) {
-    clip_ = RECT{0, 0, canvas.Width(), canvas.Height()};
+    clip_ = Rect{0, 0, canvas.Width(), canvas.Height()};
 }
 
-void Renderer::SetClip(const RECT& clip) {
-    clip_.left = (std::max)(0L, clip.left);
-    clip_.top = (std::max)(0L, clip.top);
-    clip_.right = (std::min)(static_cast<long>(canvas_.Width()), clip.right);
-    clip_.bottom = (std::min)(static_cast<long>(canvas_.Height()), clip.bottom);
+void Renderer::SetClip(const Rect& clip) {
+    clip_.left = (std::max)(0, clip.left);
+    clip_.top = (std::max)(0, clip.top);
+    clip_.right = (std::min)(canvas_.Width(), clip.right);
+    clip_.bottom = (std::min)(canvas_.Height(), clip.bottom);
 }
 
 void Renderer::Clear(std::uint32_t argb) {
@@ -480,10 +482,10 @@ void Renderer::Rasterize(const Paint& paint) {
         maxX = (std::max)(maxX, (std::max)(edge.x0, edge.x1));
     }
 
-    const long top = (std::max)(clip_.top, static_cast<long>(std::floor(minY)));
-    const long bottom = (std::min)(clip_.bottom, static_cast<long>(std::ceil(maxY)) + 1);
-    const long left = (std::max)(clip_.left, static_cast<long>(std::floor(minX)));
-    const long right = (std::min)(clip_.right, static_cast<long>(std::ceil(maxX)) + 1);
+    const auto top = (std::max)(clip_.top, static_cast<std::int32_t>(std::floor(minY)));
+    const auto bottom = (std::min)(clip_.bottom, static_cast<std::int32_t>(std::ceil(maxY)) + 1);
+    const auto left = (std::max)(clip_.left, static_cast<std::int32_t>(std::floor(minX)));
+    const auto right = (std::min)(clip_.right, static_cast<std::int32_t>(std::ceil(maxX)) + 1);
     if (top >= bottom || left >= right) return;
 
     const auto width = static_cast<std::size_t>(right - left);

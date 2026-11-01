@@ -1,6 +1,14 @@
 #include "test_framework.h"
+#include "platform.h"
 
 #include <cstdio>
+
+app_init_result app_init(const pf::window_frame_ptr&, std::span<const std::string_view>) {
+    return {false, 0};
+}
+
+void app_idle() {}
+void app_destroy() {}
 
 int main() {
     auto& tests = testing::Registry();

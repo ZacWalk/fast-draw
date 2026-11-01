@@ -2,7 +2,8 @@
 //
 // Paths are flattened to polygons and rasterized with an anti-aliased scanline
 // fill straight into a Canvas. Strokes are converted to fill outlines, so one
-// rasterizer covers everything. Only text still goes through GDI.
+// rasterizer covers everything. Text is delegated to libdesktop's neutral
+// draw_context.
 
 #pragma once
 
@@ -35,8 +36,8 @@ struct RectF {
     }
 
     static RectF Around(Vec2 a, Vec2 b);
-    static RectF FromRect(const RECT& rect);
-    RECT ToRect() const;
+    static RectF FromRect(const Rect& rect);
+    Rect ToRect() const;
 };
 
 // Maps document coordinates (0.01 inch units, y axis up, origin at the centre
@@ -137,8 +138,8 @@ public:
     explicit Renderer(Canvas& canvas);
 
     // Everything is clipped to this rectangle, in device pixels.
-    void SetClip(const RECT& clip);
-    const RECT& Clip() const { return clip_; }
+    void SetClip(const Rect& clip);
+    const Rect& Clip() const { return clip_; }
 
     void Clear(std::uint32_t argb);
     void Fill(const Path& path, const Paint& paint);
@@ -156,7 +157,7 @@ private:
     void Rasterize(const Paint& paint);
 
     Canvas& canvas_;
-    RECT clip_{};
+    Rect clip_{};
     std::vector<Edge> edges_;
     std::vector<int> order_;
     std::vector<int> active_;

@@ -30,14 +30,14 @@ Enum EnumValue(const Json& json, const std::string_view (&names)[N], Enum fallba
 
 }  // namespace
 
-std::string ColourToHex(COLORREF colour) {
+std::string ColourToHex(const Color colour) {
     char buffer[8];
-    std::snprintf(buffer, sizeof(buffer), "#%02x%02x%02x", GetRValue(colour), GetGValue(colour),
-                  GetBValue(colour));
+    std::snprintf(buffer, sizeof(buffer), "#%02x%02x%02x", colour >> 16 & 0xffu,
+                  colour >> 8 & 0xffu, colour & 0xffu);
     return buffer;
 }
 
-COLORREF ColourFromHex(std::string_view text, COLORREF fallback) {
+Color ColourFromHex(const std::string_view text, const Color fallback) {
     if (text.size() != 7 || text.front() != '#') return fallback;
 
     unsigned components[3]{};
@@ -56,7 +56,7 @@ COLORREF ColourFromHex(std::string_view text, COLORREF fallback) {
         }
     }
 
-    return RGB(components[0], components[1], components[2]);
+    return Rgb(components[0], components[1], components[2]);
 }
 
 Json StyleToJson(const Style& style) {
@@ -139,15 +139,15 @@ std::span<const float> DashPattern(DashStyle style, float strokeWidth,
 
 Paint FillPaint(const Style& style, const RectF& bounds) {
     Paint paint;
-    paint.color = ArgbFromColorRef(style.fill);
-    paint.endColor = ArgbFromColorRef(style.fillEnd);
+    paint.color = ArgbFromColor(style.fill);
+    paint.endColor = ArgbFromColor(style.fillEnd);
     paint.gradient = style.gradient;
     paint.direction = style.gradientDirection;
     paint.gradientBounds = bounds;
     return paint;
 }
 
-Paint LinePaint(const Style& style) { return SolidPaint(ArgbFromColorRef(style.line)); }
+Paint LinePaint(const Style& style) { return SolidPaint(ArgbFromColor(style.line)); }
 
 void ApplyStyleDelta(const Style& before, const Style& after, Style& target) {
     const auto take = [](const auto& from, const auto& to, auto& field) {

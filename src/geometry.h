@@ -1,98 +1,122 @@
-// Small value types over the Win32 POINT / SIZE / RECT structs.
+// Portable value types used by the document and software renderer.
 //
-// Logical (document) coordinates are 0.01 inch with the y axis pointing *up*,
-// so a logical Rect normally has top > bottom. Normalize() produces the
-// left<=right / top<=bottom ordering that the GDI region APIs expect.
+// The platform boundary uses the same coordinate convention (`pf::ipoint`,
+// `pf::isize`, `pf::irect`), but these app-owned types deliberately do not
+// expose a Windows SDK structure in public headers.
 
 #pragma once
 
-#include <windows.h>
+#include "platform.h"
 
 #include <algorithm>
+#include <cstdint>
 
-struct Size : SIZE {
-    constexpr Size() : SIZE{0, 0} {}
-    constexpr Size(long cx_, long cy_) : SIZE{cx_, cy_} {}
-    constexpr Size(SIZE s) : SIZE{s} {}
+using Color = std::uint32_t;  // 0x00RRGGBB, alpha is added at render time.
 
-    friend constexpr bool operator==(const Size& a, const Size& b) {
-        return a.cx == b.cx && a.cy == b.cy;
+constexpr Color Rgb(const std::uint32_t r, const std::uint32_t g, const std::uint32_t b) {
+    return (r << 16) | (g << 8) | b;
+}
+
+// Kept as a source-compatible color constructor while the document format
+// migration settles; unlike the SDK macro this is a portable RGB value.
+constexpr Color RGB(const std::uint32_t r, const std::uint32_t g, const std::uint32_t b) {
+    return Rgb(r, g, b);
+}
+
+struct Size {
+    std::int32_t cx = 0;
+    std::int32_t cy = 0;
+
+    constexpr Size() = default;
+    constexpr Size(const std::int32_t width, const std::int32_t height) : cx(width), cy(height) {}
+    constexpr Size(const pf::isize value) : cx(value.cx), cy(value.cy) {}
+
+    constexpr operator pf::isize() const { return {cx, cy}; }
+    friend constexpr bool operator==(const Size&, const Size&) = default;
+};
+
+struct Point {
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+
+    constexpr Point() = default;
+    constexpr Point(const std::int32_t x_, const std::int32_t y_) : x(x_), y(y_) {}
+    constexpr Point(const pf::ipoint value) : x(value.x), y(value.y) {}
+
+    constexpr operator pf::ipoint() const { return {x, y}; }
+    friend constexpr bool operator==(const Point&, const Point&) = default;
+
+    constexpr Point operator+(const Size& size) const { return {x + size.cx, y + size.cy}; }
+    constexpr Point operator-(const Size& size) const { return {x - size.cx, y - size.cy}; }
+    constexpr Size operator-(const Point& point) const { return {x - point.x, y - point.y}; }
+
+    constexpr Point& operator+=(const Size& size) {
+        x += size.cx;
+        y += size.cy;
+        return *this;
+    }
+    constexpr Point& operator-=(const Size& size) {
+        x -= size.cx;
+        y -= size.cy;
+        return *this;
     }
 };
 
-struct Point : POINT {
-    constexpr Point() : POINT{0, 0} {}
-    constexpr Point(long x_, long y_) : POINT{x_, y_} {}
-    constexpr Point(POINT p) : POINT{p} {}
+struct Rect {
+    std::int32_t left = 0;
+    std::int32_t top = 0;
+    std::int32_t right = 0;
+    std::int32_t bottom = 0;
 
-    friend constexpr bool operator==(const Point& a, const Point& b) {
-        return a.x == b.x && a.y == b.y;
-    }
-
-    constexpr Point operator+(const Size& s) const { return {x + s.cx, y + s.cy}; }
-    constexpr Point operator-(const Size& s) const { return {x - s.cx, y - s.cy}; }
-    constexpr Size operator-(const Point& p) const { return {x - p.x, y - p.y}; }
-
-    constexpr Point& operator+=(const Size& s) {
-        x += s.cx;
-        y += s.cy;
-        return *this;
-    }
-    constexpr Point& operator-=(const Size& s) {
-        x -= s.cx;
-        y -= s.cy;
-        return *this;
-    }
-};
-
-struct Rect : RECT {
-    constexpr Rect() : RECT{0, 0, 0, 0} {}
-    constexpr Rect(long l, long t, long r, long b) : RECT{l, t, r, b} {}
-    constexpr Rect(RECT r) : RECT{r} {}
+    constexpr Rect() = default;
+    constexpr Rect(const std::int32_t l, const std::int32_t t, const std::int32_t r,
+                   const std::int32_t b)
+        : left(l), top(t), right(r), bottom(b) {}
     constexpr Rect(const Point& topLeft, const Size& size)
-        : RECT{topLeft.x, topLeft.y, topLeft.x + size.cx, topLeft.y + size.cy} {}
+        : left(topLeft.x), top(topLeft.y), right(topLeft.x + size.cx), bottom(topLeft.y + size.cy) {}
 
-    constexpr long Width() const { return right - left; }
-    constexpr long Height() const { return bottom - top; }
+    constexpr std::int32_t Width() const { return right - left; }
+    constexpr std::int32_t Height() const { return bottom - top; }
     constexpr Point TopLeft() const { return {left, top}; }
     constexpr Point BottomRight() const { return {right, bottom}; }
     constexpr Size GetSize() const { return {Width(), Height()}; }
-
     constexpr bool IsEmpty() const { return left >= right || top >= bottom; }
 
     constexpr void Normalize() {
         if (left > right) std::swap(left, right);
         if (top > bottom) std::swap(top, bottom);
     }
+
     constexpr Rect Normalized() const {
-        Rect r = *this;
-        r.Normalize();
-        return r;
+        Rect result = *this;
+        result.Normalize();
+        return result;
     }
 
-    constexpr void Inflate(long dx, long dy) {
+    constexpr void Inflate(const std::int32_t dx, const std::int32_t dy) {
         left -= dx;
         top -= dy;
         right += dx;
         bottom += dy;
     }
-    constexpr void Offset(long dx, long dy) {
+
+    constexpr void Offset(const std::int32_t dx, const std::int32_t dy) {
         left += dx;
         right += dx;
         top += dy;
         bottom += dy;
     }
 
-    // Both operands must be normalized for these to be meaningful.
     Rect Intersect(const Rect& other) const {
-        Rect out;
-        ::IntersectRect(&out, this, &other);
-        return out;
+        return {std::max(left, other.left), std::max(top, other.top),
+                std::min(right, other.right), std::min(bottom, other.bottom)};
     }
+
     Rect Union(const Rect& other) const {
-        Rect out;
-        ::UnionRect(&out, this, &other);
-        return out;
+        if (IsEmpty()) return other;
+        if (other.IsEmpty()) return *this;
+        return {std::min(left, other.left), std::min(top, other.top),
+                std::max(right, other.right), std::max(bottom, other.bottom)};
     }
 
     constexpr Rect& operator+=(const Size& delta) {
@@ -100,7 +124,5 @@ struct Rect : RECT {
         return *this;
     }
 
-    friend constexpr bool operator==(const Rect& a, const Rect& b) {
-        return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
-    }
+    friend constexpr bool operator==(const Rect&, const Rect&) = default;
 };

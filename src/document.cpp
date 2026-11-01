@@ -15,20 +15,11 @@ constexpr std::size_t kMaxHistory = 128;
 // A page side read from a file is capped at 100": several times A0, yet small
 // enough that the grid, the scroll range and an export stay tractable. A
 // damaged file asking for kilometres of paper would otherwise hang the view.
-constexpr long kMaxPageSide = 10000;
+constexpr std::int32_t kMaxPageSide = 10000;
 
 int NextUntitledIndex() {
     static int next = 1;
     return next++;
-}
-
-void ReportFailure(HWND owner, std::wstring_view action, const std::filesystem::path& path,
-                   const std::exception& error) {
-    const std::string what = error.what();
-    const std::wstring message = L"Could not " + std::wstring(action) + L" " +
-                                 path.filename().wstring() + L".\n\n" +
-                                 std::wstring(what.begin(), what.end());
-    ::MessageBoxW(owner, message.c_str(), L"fast-draw", MB_OK | MB_ICONERROR);
 }
 
 }  // namespace
@@ -120,16 +111,15 @@ void Document::MoveBackward(ObjectId id) {
     modified_ = true;
 }
 
-void Document::Draw(Renderer& renderer, HDC textDc, const Transform& transform,
+void Document::Draw(Renderer& renderer, Canvas& canvas, const Transform& transform,
                     ObjectId editing) const {
     for (const DrawObj& object : objects_) {
         object.Draw(renderer, transform);
-        if (textDc)
-            object.DrawLabel(textDc, transform, editing == ObjectId::None || object.id != editing);
+        object.DrawLabel(canvas, transform, editing == ObjectId::None || object.id != editing);
     }
 }
 
-void Document::SetPaperColour(COLORREF colour) {
+void Document::SetPaperColour(const Color colour) {
     paperColour_ = colour;
     modified_ = true;
 }
@@ -193,7 +183,7 @@ bool Document::Redo() {
     return true;
 }
 
-bool Document::Load(HWND owner, const std::filesystem::path& path) {
+bool Document::Load(const std::filesystem::path& path, const ErrorHandler& report) {
     try {
         const Json json = Json::Parse(ReadFileText(path));
 
@@ -219,12 +209,12 @@ bool Document::Load(HWND owner, const std::filesystem::path& path) {
         modified_ = false;
         return true;
     } catch (const std::exception& error) {
-        ReportFailure(owner, L"open", path, error);
+        if (report) report(L"open", path, error.what());
         return false;
     }
 }
 
-bool Document::Save(HWND owner, const std::filesystem::path& path) {
+bool Document::Save(const std::filesystem::path& path, const ErrorHandler& report) {
     try {
         Json page = Json::MakeObject();
         page.Set("width", Json(pageSize_.cx));
@@ -244,7 +234,7 @@ bool Document::Save(HWND owner, const std::filesystem::path& path) {
         modified_ = false;
         return true;
     } catch (const std::exception& error) {
-        ReportFailure(owner, L"save", path, error);
+        if (report) report(L"save", path, error.what());
         return false;
     }
 }

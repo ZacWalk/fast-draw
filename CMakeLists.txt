@@ -20,64 +20,53 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 enable_testing()
 
 # ---------------------------------------------------------------------------
-# Third-party: zlib and libpng, fetched and built from source.
+# Shared libraries: libdesktop owns the Win32 window/reactor/presentation
+# boundary; libfiles owns the PNG codec and its zlib dependency.
 # ---------------------------------------------------------------------------
 include(FetchContent)
-# zlib and libpng are pinned in cmake/dd-dependencies.json, as release archives by SHA-256, and read
-# through dd's loader.
-include("${CMAKE_CURRENT_SOURCE_DIR}/.dd/dependencies.cmake")
 
-set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
+set(BUILD_SHARED_LIBS OFF)
+set(BUILD_TESTING OFF)
 
-set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(ZLIB_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(ZLIB_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-set(ZLIB_INSTALL OFF CACHE BOOL "" FORCE)
-set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(FAST_DRAW_LIBDESKTOP_REVISION 31aae322af6e0696a9597726705b1121bd31580b)
+set(FAST_DRAW_LIBFILES_REVISION 27de9d9fb67d7be7fcf9ff8a9f87dad5a91ae3eb)
 
-dd_dependency_arguments("${CMAKE_CURRENT_SOURCE_DIR}/cmake/dd-dependencies.json" zlib _fd_zlib_acquisition)
-FetchContent_Declare(zlib ${_fd_zlib_acquisition})
-FetchContent_MakeAvailable(zlib)
+if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_LIBDESKTOP
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libdesktop/CMakeLists.txt")
+    set(FETCHCONTENT_SOURCE_DIR_LIBDESKTOP "${CMAKE_CURRENT_SOURCE_DIR}/../libdesktop"
+        CACHE PATH "A libdesktop checkout to build instead of the pinned commit")
+endif()
 
-# zconf.h is generated into the build tree, so both directories are needed.
-target_include_directories(zlibstatic PUBLIC "${zlib_SOURCE_DIR}" "${zlib_BINARY_DIR}")
-add_library(ZLIB::ZLIB ALIAS zlibstatic)
+FetchContent_Declare(libdesktop
+    GIT_REPOSITORY https://github.com/ZacWalk/libdesktop.git
+    GIT_TAG        ${FAST_DRAW_LIBDESKTOP_REVISION}
+    EXCLUDE_FROM_ALL)
+FetchContent_MakeAvailable(libdesktop)
 
-# libpng locates zlib through the classic FindZLIB variables.
-set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR}" "${zlib_BINARY_DIR}" CACHE STRING "" FORCE)
-set(ZLIB_INCLUDE_DIRS "${zlib_SOURCE_DIR}" "${zlib_BINARY_DIR}" CACHE STRING "" FORCE)
-set(ZLIB_LIBRARY ZLIB::ZLIB CACHE STRING "" FORCE)
-set(ZLIB_LIBRARIES ZLIB::ZLIB CACHE STRING "" FORCE)
-set(ZLIB_FOUND TRUE CACHE BOOL "" FORCE)
+if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_LIBFILES
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libfiles/CMakeLists.txt")
+    set(FETCHCONTENT_SOURCE_DIR_LIBFILES "${CMAKE_CURRENT_SOURCE_DIR}/../libfiles"
+        CACHE PATH "A libfiles checkout to build instead of the pinned commit")
+endif()
 
-set(PNG_SHARED OFF CACHE BOOL "" FORCE)
-set(PNG_STATIC ON CACHE BOOL "" FORCE)
-set(PNG_TESTS OFF CACHE BOOL "" FORCE)
-set(PNG_TOOLS OFF CACHE BOOL "" FORCE)
-set(PNG_FRAMEWORK OFF CACHE BOOL "" FORCE)
-set(PNG_BUILD_ZLIB OFF CACHE BOOL "" FORCE)
+# fast-draw only encodes PNG. Keep the shared library's other codec recipes out
+# of this build, including document codecs that fast-draw never opens.
+set(LIBFILES_JPEG OFF)
+set(LIBFILES_PNG ON)
+set(LIBFILES_WEBP OFF)
+set(LIBFILES_HEIF OFF)
+set(LIBFILES_JXL OFF)
+set(LIBFILES_RAW OFF)
+set(LIBFILES_GIF OFF)
+set(LIBFILES_TIFF OFF)
 
-dd_dependency_arguments("${CMAKE_CURRENT_SOURCE_DIR}/cmake/dd-dependencies.json" libpng _fd_png_acquisition)
-FetchContent_Declare(libpng ${_fd_png_acquisition})
-FetchContent_MakeAvailable(libpng)
-
-# zlib and libpng are third-party; do not hold them to our warning level.
-foreach(third_party zlibstatic png_static)
-    if(TARGET ${third_party})
-        set_target_properties(${third_party} PROPERTIES FOLDER "third-party")
-        target_compile_options(${third_party} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/W0>)
-    endif()
-endforeach()
-
-add_library(fast-draw-png INTERFACE)
-target_link_libraries(fast-draw-png INTERFACE png_static ZLIB::ZLIB)
-target_include_directories(fast-draw-png INTERFACE
-    "${libpng_SOURCE_DIR}"
-    "${libpng_BINARY_DIR}"
-    "${zlib_SOURCE_DIR}"
-    "${zlib_BINARY_DIR}"
-)
+FetchContent_Declare(libfiles
+    GIT_REPOSITORY https://github.com/ZacWalk/libfiles.git
+    GIT_TAG        ${FAST_DRAW_LIBFILES_REVISION}
+    EXCLUDE_FROM_ALL)
+FetchContent_MakeAvailable(libfiles)
 
 # ---------------------------------------------------------------------------
 # Everything except the entry point lives in a static library so the tests can
@@ -86,8 +75,6 @@ target_include_directories(fast-draw-png INTERFACE
 add_library(fast-draw-lib STATIC
     src/canvas.cpp
     src/canvas.h
-    src/color_popup.cpp
-    src/color_popup.h
     src/document.cpp
     src/document.h
     src/draw_obj.cpp
@@ -99,6 +86,8 @@ add_library(fast-draw-lib STATIC
     src/json.h
     src/main_window.cpp
     src/main_window.h
+    src/print_backend.cpp
+    src/print_backend.h
     src/png_export.cpp
     src/png_export.h
     src/render.cpp
@@ -144,26 +133,19 @@ if(MSVC)
 endif()
 
 target_link_libraries(fast-draw-lib PUBLIC
-    fast-draw-png
-    comdlg32
-    gdi32
-    user32
-    shell32
-    msimg32
+    libdesktop::core
+    libfiles::libfiles
 )
 
-add_executable(fast-draw WIN32
-    src/main.cpp
-    src/fast-draw.rc
-    src/fast-draw.manifest
+platform_add_app(fast-draw
+    SOURCES
+        src/main.cpp
+    ICON        src/res/fast-draw.ico
+    DESCRIPTION "fast-draw"
+    OUTPUT_NAME fast-draw
 )
 
 target_link_libraries(fast-draw PRIVATE fast-draw-lib)
-
-if(MSVC)
-    # The .rc uses the same UNICODE settings as the C++ sources.
-    target_compile_definitions(fast-draw PRIVATE $<$<COMPILE_LANGUAGE:RC>:UNICODE;_UNICODE>)
-endif()
 
 set_target_properties(fast-draw PROPERTIES OUTPUT_NAME "fast-draw")
 

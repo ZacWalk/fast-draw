@@ -1,5 +1,6 @@
 #include "draw_obj.h"
 
+#include "ui.h"
 #include "utf8.h"
 
 #include <algorithm>
@@ -96,26 +97,23 @@ void DrawObj::Draw(Renderer& renderer, const Transform& transform) const {
     renderer.Fill(heads, LinePaint(style));
 }
 
-HFONT CreateStyleFont(const Style& style, float scale) {
-    LOGFONTW font{};
-    // `scale` is device pixels per 0.01 inch, so pixels per inch is 100x that.
-    font.lfHeight = -static_cast<LONG>(style.fontSize * scale * 100.0f / 72.0f + 0.5f);
-    font.lfWeight = style.bold ? FW_SEMIBOLD : FW_NORMAL;
-    font.lfItalic = style.italic ? TRUE : FALSE;
-    font.lfQuality = CLEARTYPE_QUALITY;
-    font.lfCharSet = DEFAULT_CHARSET;
-    ::wcscpy_s(font.lfFaceName, L"Segoe UI");
-    return ::CreateFontIndirectW(&font);
+pf::font_handle CreateStyleFont(const Style& style, const float scale) {
+    pf::font_def definition;
+    definition.face = "Segoe UI";
+    definition.size = (std::max)(1, static_cast<int>(std::lround(style.fontSize * scale / 0.96f)));
+    definition.weight = style.bold ? 600 : 400;
+    definition.italic = style.italic;
+    return pf::create_font_handle(definition);
 }
 
-RECT LabelRect(const DrawObj& object, const Transform& transform) {
+Rect LabelRect(const DrawObj& object, const Transform& transform) {
     Rect box = object.position.Normalized();
 
     if (IsLinear(object.kind)) {
         // Sit the label just above the middle of the line.
-        const long cx = (box.left + box.right) / 2;
-        const long cy = (box.top + box.bottom) / 2;
-        const long halfWidth = (std::max)(120L, box.Width() / 2);
+        const auto cx = (box.left + box.right) / 2;
+        const auto cy = (box.top + box.bottom) / 2;
+        const auto halfWidth = (std::max)(std::int32_t{120}, box.Width() / 2);
         box = Rect(cx - halfWidth, cy + 58, cx + halfWidth, cy + 8);
     } else {
         box.Inflate(-kLabelInset, -kLabelInset);
@@ -127,28 +125,29 @@ RECT LabelRect(const DrawObj& object, const Transform& transform) {
     return device.ToRect();
 }
 
-void DrawObj::DrawLabel(HDC dc, const Transform& transform, bool fit) const {
+void DrawObj::DrawLabel(Canvas& canvas, const Transform& transform, const bool fit) const {
+    (void)fit;
     if (text.empty()) return;
 
-    HFONT font = CreateStyleFont(style, transform.scale);
+    const pf::font_handle font = CreateStyleFont(style, transform.scale);
     if (!font) return;
 
-    HGDIOBJ previousFont = ::SelectObject(dc, font);
-    const COLORREF previousColour = ::SetTextColor(dc, style.textColour);
-    const int previousMode = ::SetBkMode(dc, TRANSPARENT);
-
-    RECT box = LabelRect(*this, transform);
-    ::DrawTextW(dc, text.c_str(), -1, &box,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
-                    (fit ? DT_END_ELLIPSIS : DT_NOCLIP));
-
-    ::SetBkMode(dc, previousMode);
-    ::SetTextColor(dc, previousColour);
-    ::SelectObject(dc, previousFont);
-    ::DeleteObject(font);
-
-    // GDI batches drawing; flush before the rasterizer touches the same pixels.
-    ::GdiFlush();
+    const Rect box = LabelRect(*this, transform);
+    std::wstring display = text;
+    if (fit) {
+        const auto fits = [&] {
+            auto context = pf::create_pixel_surface_context(canvas.Surface());
+            return context &&
+                   context->measure_text_h(pf::utf16_to_utf8(display), font).cx <= box.Width();
+        };
+        while (!display.empty() && !fits()) {
+            const std::size_t stop = PreviousCaretStop(display, display.size());
+            display.resize(stop);
+            if (!display.empty()) display += L"\u2026";
+        }
+    }
+    ui::Text(canvas, box, display, style.textColour, ui::TextAlign::center, font);
+    pf::delete_font_handle(font);
 }
 
 Rect DrawObj::Bounds() const {
@@ -245,24 +244,6 @@ void DrawObj::MoveHandle(int index, Point docPoint) {
         case 7: position.left = docPoint.x; break;
         default: break;
     }
-}
-
-HCURSOR DrawObj::HandleCursor(int index) const {
-    if (IsLinear(kind)) return ::LoadCursorW(nullptr, IDC_SIZEALL);
-
-    LPCWSTR cursor = IDC_ARROW;
-    switch (index) {
-        case 0:
-        case 4: cursor = IDC_SIZENWSE; break;
-        case 1:
-        case 5: cursor = IDC_SIZENS; break;
-        case 2:
-        case 6: cursor = IDC_SIZENESW; break;
-        case 3:
-        case 7: cursor = IDC_SIZEWE; break;
-        default: break;
-    }
-    return ::LoadCursorW(nullptr, cursor);
 }
 
 void DrawObj::Offset(Size delta) { position.Offset(delta.cx, delta.cy); }

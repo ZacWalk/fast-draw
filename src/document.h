@@ -13,6 +13,7 @@
 #include "geometry.h"
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,6 +21,9 @@
 class Document {
 public:
     using ObjectList = std::vector<DrawObj>;
+    using ErrorHandler =
+        std::function<void(std::wstring_view action, const std::filesystem::path& path,
+                           std::string_view detail)>;
 
     Document();
 
@@ -46,7 +50,7 @@ public:
     void MoveBackward(ObjectId id);
 
     // `editing` is the object whose label is being typed; it is drawn untrimmed.
-    void Draw(Renderer& renderer, HDC textDc, const Transform& transform,
+    void Draw(Renderer& renderer, Canvas& canvas, const Transform& transform,
               ObjectId editing = ObjectId::None) const;
 
     // Bracket every mutation so it can be undone. Nested calls collapse into
@@ -62,8 +66,8 @@ public:
     Size PageSize() const { return pageSize_; }
     void SetPageSize(Size size);
 
-    COLORREF PaperColour() const { return paperColour_; }
-    void SetPaperColour(COLORREF colour);
+    Color PaperColour() const { return paperColour_; }
+    void SetPaperColour(Color colour);
 
     bool IsModified() const { return modified_; }
     void SetModified(bool modified = true) { modified_ = modified; }
@@ -72,14 +76,15 @@ public:
     bool HasPath() const { return !path_.empty(); }
     std::wstring Title() const;
 
-    // Both report failure by returning false after showing a message box.
-    bool Load(HWND owner, const std::filesystem::path& path);
-    bool Save(HWND owner, const std::filesystem::path& path);
+    // Both report failure by returning false.  The caller supplies the
+    // platform-owned error presentation policy; tests can omit it.
+    bool Load(const std::filesystem::path& path, const ErrorHandler& report = {});
+    bool Save(const std::filesystem::path& path, const ErrorHandler& report = {});
 
 private:
     struct Snapshot {
         ObjectList objects;
-        COLORREF paperColour = 0;
+        Color paperColour = 0;
         Size pageSize;
 
         friend bool operator==(const Snapshot&, const Snapshot&) = default;
@@ -96,7 +101,7 @@ private:
     // Never rewound by undo, so a restored object can never collide with a new one.
     std::uint64_t nextId_ = 0;
     Size pageSize_{1100, 850};  // 11" x 8.5", landscape suits diagrams
-    COLORREF paperColour_ = RGB(255, 255, 255);
+    Color paperColour_ = Rgb(255, 255, 255);
     bool modified_ = false;
     std::filesystem::path path_;
     int untitledIndex_ = 0;

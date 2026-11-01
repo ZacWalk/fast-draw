@@ -1,4 +1,7 @@
-* -text
+# Source and documentation are intentionally kept in the repository's Windows
+# line ending convention. Marking them as text lets Git's whitespace checker
+# treat the carriage return as an end-of-line marker instead of trailing data.
+* text eol=crlf
 # dd's vendored runtime, byte for byte; GitHub should not count it as this project's code
 /dd.ps1 linguist-vendored
 /.dd/** linguist-vendored

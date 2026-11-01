@@ -9,9 +9,10 @@ add_executable(fast-draw-tests
     test_tab_bar.cpp
     test_view.cpp
     test_style_panel.cpp
+    test_reactor.cpp
 )
 
-target_link_libraries(fast-draw-tests PRIVATE fast-draw-lib)
+target_link_libraries(fast-draw-tests PRIVATE fast-draw-lib libfiles::png)
 
 add_test(NAME fast-draw-tests COMMAND fast-draw-tests)
 set_tests_properties(fast-draw-tests PROPERTIES LABELS fast-draw)

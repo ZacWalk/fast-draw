@@ -28,12 +28,12 @@ TEST(ColourHexRoundTrip) {
     CHECK_EQ(ColourFromHex("#123456", 0), RGB(0x12, 0x34, 0x56));
     CHECK_EQ(ColourFromHex("#ABCDEF", 0), RGB(0xAB, 0xCD, 0xEF));
 
-    const COLORREF original = RGB(12, 200, 7);
+    const Color original = RGB(12, 200, 7);
     CHECK_EQ(ColourFromHex(ColourToHex(original), 0), original);
 }
 
 TEST(ColourHexRejectsBadInput) {
-    const COLORREF fallback = RGB(1, 2, 3);
+    const Color fallback = RGB(1, 2, 3);
     CHECK_EQ(ColourFromHex("", fallback), fallback);
     CHECK_EQ(ColourFromHex("123456", fallback), fallback);
     CHECK_EQ(ColourFromHex("#12345", fallback), fallback);
@@ -437,7 +437,7 @@ TEST(LoadingClearsTheHistory) {
 
     Document saved;
     saved.Add(DrawObj(ShapeKind::Rectangle, Rect(0, 10, 10, 0), Style{}));
-    CHECK(saved.Save(nullptr, path));
+    CHECK(saved.Save(path));
 
     Document document;
     document.BeginChange();
@@ -445,7 +445,7 @@ TEST(LoadingClearsTheHistory) {
     document.CommitChange();
     CHECK(document.CanUndo());
 
-    CHECK(document.Load(nullptr, path));
+    CHECK(document.Load(path));
     CHECK(!document.CanUndo());
     CHECK(!document.CanRedo());
 
@@ -460,7 +460,7 @@ TEST(LoadingCapsAnAbsurdPageSize) {
                         R"("page":{"width":2000000000,"height":2000000000},"objects":[]})");
 
     Document document;
-    CHECK(document.Load(nullptr, path));
+    CHECK(document.Load(path));
     CHECK(document.PageSize().cx > 0 && document.PageSize().cx <= 10000);
     CHECK(document.PageSize().cy > 0 && document.PageSize().cy <= 10000);
 
@@ -468,7 +468,7 @@ TEST(LoadingCapsAnAbsurdPageSize) {
     WriteFileText(path, R"({"format":"fast-draw","version":2,)"
                         R"("page":{"width":1654,"height":1169},"objects":[]})");
     Document a3;
-    CHECK(a3.Load(nullptr, path));
+    CHECK(a3.Load(path));
     CHECK(a3.PageSize() == Size(1654, 1169));
 
     std::filesystem::remove(path);
@@ -540,11 +540,11 @@ TEST(DocumentSaveAndLoad) {
     DrawObj object(ShapeKind::Hexagon, Rect(-50, 25, 50, -25), Style{});
     object.text = L"Gateway";
     saved.Add(std::move(object));
-    CHECK(saved.Save(nullptr, path));
+    CHECK(saved.Save(path));
     CHECK(!saved.IsModified());
 
     Document loaded;
-    CHECK(loaded.Load(nullptr, path));
+    CHECK(loaded.Load(path));
     CHECK_EQ(loaded.Objects().size(), std::size_t(1));
     CHECK_EQ(loaded.PaperColour(), RGB(0xF0, 0xF0, 0xE0));
     if (!loaded.Objects().empty()) {

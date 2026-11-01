@@ -3,9 +3,9 @@
 [![Build](https://github.com/ZacWalk/fast-draw/actions/workflows/build.yml/badge.svg)](https://github.com/ZacWalk/fast-draw/actions/workflows/build.yml)
 
 A small, fast vector drawing program for Windows, aimed at system architecture
-diagrams and quick sketches. A plain Win32 SDK application in C++20 with its own
-anti-aliased software renderer — no UI framework and no common controls: the tab
-strip, sidebar, shape palette and colour picker are all drawn by the app itself.
+diagrams and quick sketches. A C++20 application using libdesktop's shared
+window/reactor/input layer and its own anti-aliased software renderer — the tab
+strip, sidebar, shape palette and colour controls remain app-owned drawing.
 
 Back in the late 1990s and early 2000s I worked on a Windows application to draw
 business process diagrams at a company called Casewise. It was cool because you
@@ -35,8 +35,8 @@ from 2005 and got it building again.
 
 Requires Windows x64 and Visual Studio with the Desktop C++ workload. The
 vendored [dd](https://github.com/ZacWalk/dd) runtime locates Visual Studio and
-uses the CMake and Ninja that ship with it. zlib and libpng are fetched
-automatically.
+uses the CMake and Ninja that ship with it. libdesktop and libfiles are fetched
+at their published pins; libfiles builds only the PNG codec needed by fast-draw.
 
 ```powershell
 .\dd.ps1 build        # both configurations

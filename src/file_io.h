@@ -2,6 +2,8 @@
 
 #include <filesystem>
 #include <stdexcept>
+#include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -10,7 +12,9 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-// Both throw FileError on failure. Content is treated as raw bytes; the
-// document and SVG writers produce UTF-8.
+// Reads and atomic writes delegate to libdesktop's shared file handles. Both
+// throw FileError on failure. Content is treated as raw bytes; the document
+// writers produce UTF-8.
 std::string ReadFileText(const std::filesystem::path& path);
 void WriteFileText(const std::filesystem::path& path, std::string_view text);
+void WriteFileBytes(const std::filesystem::path& path, std::span<const std::uint8_t> bytes);

@@ -10,7 +10,7 @@ configuration fails fast on any other platform or toolchain.
 | --- | --- |
 | `src/` | Application sources |
 | `tests/` | `fast-draw-tests` CTest executable plus the dd smoke test |
-| `cmake/` | dd's dependency manifest (`dd-dependencies.json`), which pins zlib 1.3.1 and libpng 1.6.44 as release archives by SHA-256, with method `application`: `CMakeLists.txt` builds them |
+| `cmake/` | Project-specific CMake helpers; codec recipes live in libfiles |
 | `dd.psd1` | Project manifest: targets, presets and output paths |
 | `CMakePresets.json` | `x64-debug` and `x64-release` configure/build/test presets |
 
@@ -28,8 +28,8 @@ CTest target in both configurations.
 This repository vendors [dd](https://github.com/ZacWalk/dd) without local
 changes: `dd.ps1` and `.dd/`, with hashes tracked by
 [docs/dd-upstream.json](docs/dd-upstream.json). The app-specific settings are in
-`dd.psd1`; zlib and libpng are pinned by SHA-256 in `cmake/dd-dependencies.json`,
-which the `FetchContent` declarations in `CMakeLists.txt` read; and
+`dd.psd1`; published libdesktop and libfiles revisions are pinned in
+`CMakeLists.txt` (with optional sibling checkouts for development); and
 `.\dd.ps1 commands --json` prints this project's commands. Upstream dd documents
 its [two modes](https://github.com/ZacWalk/dd/blob/main/docs/mcp.md#two-modes)
 and [command set](https://github.com/ZacWalk/dd/blob/main/docs/cli.md#commands).
@@ -37,9 +37,8 @@ and [command set](https://github.com/ZacWalk/dd/blob/main/docs/cli.md#commands).
 ## Conventions
 
 - The app target is `fast-draw`; the CTest label is also `fast-draw`.
-- libpng and zlib are acquired by CMake, not vendored into the tree.
-- Keep the Win32 entry point and message loop in `src/`; do not introduce a
-  cross-platform abstraction of the app's own. If the app moves off raw Win32,
-  it moves onto the shared [libdesktop](https://github.com/ZacWalk/libdesktop),
-  whose [todo](https://github.com/ZacWalk/libdesktop/blob/main/docs/todo.md)
-  lists it as a candidate adopter.
+- libdesktop's `pf::window_frame` and `pf::frame_reactor` own entry point,
+  message loop, input, menus, dialogs, DPI, and pixel presentation. The app
+  keeps its document model and explicit software rasterizer in `src/`.
+- libfiles owns PNG encoding and the zlib/libpng recipe. Do not add a direct
+  codec recipe or a second PNG implementation.
