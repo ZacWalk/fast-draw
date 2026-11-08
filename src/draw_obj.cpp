@@ -97,13 +97,13 @@ void DrawObj::Draw(Renderer& renderer, const Transform& transform) const {
     renderer.Fill(heads, LinePaint(style));
 }
 
-pf::font_handle CreateStyleFont(const Style& style, const float scale) {
-    pf::font_def definition;
-    definition.face = "Segoe UI";
+render::font_face CreateStyleFont(const Style& style, const float scale) {
+    render::font_desc definition;
+    definition.family = "Segoe UI";
     definition.size = (std::max)(1, static_cast<int>(std::lround(style.fontSize * scale / 0.96f)));
     definition.weight = style.bold ? 600 : 400;
     definition.italic = style.italic;
-    return pf::create_font_handle(definition);
+    return render::make_font(definition);
 }
 
 Rect LabelRect(const DrawObj& object, const Transform& transform) {
@@ -129,16 +129,16 @@ void DrawObj::DrawLabel(Canvas& canvas, const Transform& transform, const bool f
     (void)fit;
     if (text.empty()) return;
 
-    const pf::font_handle font = CreateStyleFont(style, transform.scale);
-    if (!font) return;
+    const render::font_face font = CreateStyleFont(style, transform.scale);
 
     const Rect box = LabelRect(*this, transform);
     std::wstring display = text;
     if (fit) {
         const auto fits = [&] {
-            auto context = pf::create_pixel_surface_context(canvas.Surface());
+            auto context = render::create_surface_context(canvas.Surface());
             return context &&
-                   context->measure_text_h(pf::utf16_to_utf8(display), font).cx <= box.Width();
+                   context->measure_text(core::utf16_to_utf8(display), font,
+                                         render::text_style::single_line, box.Width()).cx <= box.Width();
         };
         while (!display.empty() && !fits()) {
             const std::size_t stop = PreviousCaretStop(display, display.size());
@@ -147,7 +147,6 @@ void DrawObj::DrawLabel(Canvas& canvas, const Transform& transform, const bool f
         }
     }
     ui::Text(canvas, box, display, style.textColour, ui::TextAlign::center, font);
-    pf::delete_font_handle(font);
 }
 
 Rect DrawObj::Bounds() const {

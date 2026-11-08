@@ -20,8 +20,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 enable_testing()
 
 # ---------------------------------------------------------------------------
-# Shared libraries: libdesktop owns the Win32 window/reactor/presentation
-# boundary; libfiles owns the PNG codec and its zlib dependency.
+# Shared libraries: libdesktop owns the platform, rendering and UI boundary;
+# libfiles owns the PNG codec and its zlib dependency.
 # ---------------------------------------------------------------------------
 include(FetchContent)
 
@@ -30,7 +30,7 @@ set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
 set(BUILD_SHARED_LIBS OFF)
 set(BUILD_TESTING OFF)
 
-set(FAST_DRAW_LIBDESKTOP_REVISION 31aae322af6e0696a9597726705b1121bd31580b)
+set(FAST_DRAW_LIBDESKTOP_REVISION 04109ee82a500db38d439fa281bbc3f43124adfe)
 set(FAST_DRAW_LIBFILES_REVISION 27de9d9fb67d7be7fcf9ff8a9f87dad5a91ae3eb)
 
 if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_LIBDESKTOP
@@ -133,11 +133,11 @@ if(MSVC)
 endif()
 
 target_link_libraries(fast-draw-lib PUBLIC
-    libdesktop::core
+    libdesktop::ui
     libfiles::libfiles
 )
 
-platform_add_app(fast-draw
+libdesktop_add_app(fast-draw
     SOURCES
         src/main.cpp
     ICON        src/res/fast-draw.ico

@@ -1,16 +1,12 @@
 #include "test_framework.h"
-#include "platform.h"
+#include "libdesktop/platform.h"
 
 #include <cstdio>
 
-app_init_result app_init(const pf::window_frame_ptr&, std::span<const std::string_view>) {
-    return {false, 0};
-}
-
-void app_idle() {}
-void app_destroy() {}
-
 int main() {
+    // The tests measure and draw on this thread, as an application does on the one platform::run names.
+    platform::set_ui_thread();
+
     auto& tests = testing::Registry();
     std::printf("running %zu tests\n", tests.size());
 

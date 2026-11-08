@@ -6,6 +6,7 @@
 #pragma once
 
 #include "geometry.h"
+#include "libdesktop/render.h"
 #include "render.h"
 #include "shapes.h"
 #include "style.h"
@@ -59,7 +60,7 @@ public:
 };
 
 // The label font at a given document-to-device scale. The caller owns it.
-pf::font_handle CreateStyleFont(const Style& style, float scale);
+render::font_face CreateStyleFont(const Style& style, float scale);
 
 // The rectangle the text label is laid out in, in device pixels.
 Rect LabelRect(const DrawObj& object, const Transform& transform);

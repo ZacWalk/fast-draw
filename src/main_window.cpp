@@ -4,6 +4,11 @@
 #include "print_backend.h"
 #include "resource.h"
 
+#include "libdesktop/core/strings.h"
+#include "libdesktop/platform/dialogs.h"
+#include "libdesktop/platform/services.h"
+#include "libdesktop/platform/win32.h"
+
 #include <algorithm>
 #include <array>
 #include <string>
@@ -13,29 +18,21 @@ namespace {
 constexpr int kSidebarWidth = 236;
 constexpr int kPaletteFloor = 230;
 
-constexpr char kFdrFilter[] =
-    "fast-draw drawings (*.fdr)\0*.fdr\0All files (*.*)\0*.*\0";
-constexpr char kPngFilter[] = "PNG images (*.png)\0*.png\0All files (*.*)\0*.*\0";
-
 bool Contains(const Rect& rect, const Point point) {
     return point.x >= rect.left && point.x < rect.right &&
            point.y >= rect.top && point.y < rect.bottom;
-}
-
-Point LocalPoint(const Rect& bounds, const Point point) {
-    return {point.x - bounds.left, point.y - bounds.top};
 }
 
 std::wstring ErrorMessage(std::wstring_view action, const std::filesystem::path& path,
                           std::string_view detail) {
     std::wstring result = L"Could not " + std::wstring(action) + L" " +
                           path.filename().wstring() + L".\n\n";
-    result += pf::utf8_to_utf16(detail);
+    result += core::utf8_to_utf16(detail);
     return result;
 }
 
-std::filesystem::path NativePath(const pf::file_path& path) {
-    return std::filesystem::path(pf::utf8_to_utf16(path.view()));
+std::filesystem::path NativePath(const core::file_path& path) {
+    return std::filesystem::path(core::utf8_to_utf16(path.str()));
 }
 
 std::vector<Color> PaletteColours() {
@@ -63,19 +60,39 @@ std::vector<Color> PaletteColours() {
     };
 }
 
+class SurfaceElement final : public ui::element {
+    MainWindow& owner_;
+
+public:
+    explicit SurfaceElement(MainWindow& owner) : owner_(owner) {
+        padding = {};
+        margin = {};
+    }
+
+    void render(render::draw_context& dc, const core::pointi element_offset) const override {
+        owner_.RenderForPaint();
+        if (const auto surface = owner_.PresentedSurface())
+            render::draw_surface(dc, surface, bounds.offset(element_offset), 1.0f,
+                                 render::texture_sampler::point);
+    }
+
+    core::sizei measure(render::measure_context&, const int) const override {
+        return bounds.extent();
+    }
+};
+
 }  // namespace
 
-bool SaveDocument(View& view, const bool forceSaveAs, const pf::window_frame_ptr& frame) {
+bool SaveDocument(View& view, const bool forceSaveAs, const ui::frame_ptr& frame) {
     view.FinishEditing();
     Document& document = view.Doc();
 
     const std::wstring existing = document.Path().wstring();
-    pf::file_path selected(existing.empty() ? "" : pf::utf16_to_utf8(existing));
-    if (forceSaveAs || selected.empty()) {
-        selected = pf::save_file_path("Save fast-draw drawing",
-                                      selected,
-                                      std::string_view(kFdrFilter, sizeof(kFdrFilter) - 1));
-        if (selected.empty()) return false;
+    core::file_path selected(existing.empty() ? "" : core::utf16_to_utf8(existing));
+    if (forceSaveAs || selected.is_empty()) {
+        const std::vector<platform::file_dialog_filter> filters = {
+            {"fast-draw drawings (*.fdr)", "*.fdr"}, {"All files (*.*)", "*.*"}};
+        if (!platform::prompt_for_save_path(selected, filters)) return false;
     }
 
     const std::filesystem::path path = NativePath(selected);
@@ -83,29 +100,33 @@ bool SaveDocument(View& view, const bool forceSaveAs, const pf::window_frame_ptr
         [frame](std::wstring_view action, const std::filesystem::path& failed,
                 std::string_view detail) {
             const std::wstring message = ErrorMessage(action, failed, detail);
-            frame->message_box(pf::utf16_to_utf8(message), "fast-draw",
-                               pf::msg_box_style::ok | pf::msg_box_style::icon_warning);
+            platform::message_box(nullptr, core::utf16_to_utf8(message), "fast-draw",
+                                  {platform::message_box_buttons::ok,
+                                   platform::message_box_icon::warning});
         };
     return document.Save(path, report);
 }
 
-bool PromptToSave(View& view, const pf::window_frame_ptr& frame) {
+bool PromptToSave(View& view, const ui::frame_ptr& frame) {
     view.FinishEditing();
     if (!view.Doc().IsModified()) return true;
 
     const std::wstring wideTitle = view.Doc().Title();
-    const std::string title = "Save changes to " +
-                              pf::utf16_to_utf8(wideTitle) + "?";
-    const int answer = frame->message_box(
-        title, "fast-draw",
-        pf::msg_box_style::yes_no_cancel | pf::msg_box_style::icon_warning);
-    if (answer == pf::msg_box_result::cancel) return false;
-    if (answer == pf::msg_box_result::no) return true;
+    const std::string title = "Save changes to " + core::utf16_to_utf8(wideTitle) + "?";
+    const auto answer = platform::message_box(nullptr, title, "fast-draw",
+                                               {platform::message_box_buttons::yes_no_cancel,
+                                                platform::message_box_icon::warning});
+    if (answer == platform::message_box_result::cancel) return false;
+    if (answer == platform::message_box_result::no) return true;
     return SaveDocument(view, false, frame);
 }
 
-MainWindow::MainWindow(pf::window_frame_ptr frame, std::vector<pf::file_path> startupPaths)
-    : frame_(std::move(frame)), startupPaths_(std::move(startupPaths)) {}
+MainWindow::MainWindow(std::vector<core::file_path> startupPaths)
+    : startupPaths_(std::move(startupPaths)) {
+    InstallMenu();
+    surfaceElement_ = std::make_shared<SurfaceElement>(*this);
+    ConfigureControls();
+}
 
 MainWindow::~MainWindow() = default;
 
@@ -119,8 +140,8 @@ void MainWindow::Invalidate() {
     if (frame_) frame_->invalidate();
 }
 
-void MainWindow::SetCursor(const pf::cursor_shape cursor) {
-    if (frame_) frame_->set_cursor_shape(cursor);
+void MainWindow::SetCursor(const platform::cursor cursor) {
+    if (frame_) frame_->set_cursor(cursor);
 }
 
 void MainWindow::ConfigureControls() {
@@ -129,9 +150,9 @@ void MainWindow::ConfigureControls() {
         captured_ = capture;
         captureTarget_ = capture ? CaptureTarget::tabs : CaptureTarget::none;
         if (capture)
-            frame_->set_capture();
+            SetCapture(true);
         else
-            frame_->release_capture();
+            SetCapture(false);
     };
     tabBar_.onSelect = [this](const int index) { ActivateTab(index); };
     tabBar_.onClose = [this](const int index) { CloseTab(index); };
@@ -142,9 +163,9 @@ void MainWindow::ConfigureControls() {
         captured_ = capture;
         captureTarget_ = capture ? CaptureTarget::style : CaptureTarget::none;
         if (capture)
-            frame_->set_capture();
+            SetCapture(true);
         else
-            frame_->release_capture();
+            SetCapture(false);
     };
     stylePanel_.onChange = [this](const Style& style) {
         if (View* view = ActiveView()) view->ApplyStyle(style);
@@ -156,11 +177,11 @@ void MainWindow::ConfigureControls() {
         captured_ = capture;
         captureTarget_ = capture ? CaptureTarget::palette : CaptureTarget::none;
         if (capture)
-            frame_->set_capture();
+            SetCapture(true);
         else
-            frame_->release_capture();
+            SetCapture(false);
     };
-    palette_.onDragCursor = [this] { SetCursor(pf::cursor_shape::hand); };
+    palette_.onDragCursor = [this] { SetCursor(platform::cursor::link); };
     palette_.onSelect = [this](const Tool tool) {
         if (View* view = ActiveView()) view->SetTool(tool);
         palette_.SetActive(tool);
@@ -186,16 +207,13 @@ View* MainWindow::NewDocument() {
         captured_ = capture;
         captureTarget_ = capture ? CaptureTarget::view : CaptureTarget::none;
         if (capture)
-            frame_->set_capture();
+            SetCapture(true);
         else
-            frame_->release_capture();
+            SetCapture(false);
     };
-    view->onCursor = [this](const pf::cursor_shape cursor) { SetCursor(cursor); };
+    view->onCursor = [this](const platform::cursor cursor) { SetCursor(cursor); };
     view->onPickColour = [this](const Color initial) { return PickColour(initial); };
-    view->onContextMenuRequested = [this] {
-        const pf::ipoint cursor = pf::platform_cursor_pos();
-        ShowContextMenu({cursor.x, cursor.y});
-    };
+    view->onContextMenuRequested = [] {};
 
     View* result = view.get();
     views_.push_back(std::move(view));
@@ -206,7 +224,7 @@ View* MainWindow::NewDocument() {
 void MainWindow::ActivateTab(const int index) {
     if (index < 0 || index >= static_cast<int>(views_.size())) return;
     activeIndex_ = index;
-    if (frame_) frame_->set_focus();
+    if (frame_) frame_->focus();
     RefreshChrome();
     Invalidate();
 }
@@ -237,6 +255,7 @@ void MainWindow::StepTab(const int delta) {
 }
 
 void MainWindow::RefreshChrome() {
+    RefreshMenuState();
     std::vector<std::wstring> titles;
     titles.reserve(views_.size());
     for (const auto& view : views_) {
@@ -249,21 +268,23 @@ void MainWindow::RefreshChrome() {
     if (View* view = ActiveView()) {
         stylePanel_.SetStyle(view->EffectiveStyle(), !view->Selection().empty());
         palette_.SetActive(view->CurrentTool());
-        const std::wstring wideTitle = view->Doc().Title();
-        frame_->set_text(pf::utf16_to_utf8(wideTitle) + " - fast-draw");
-    } else {
-        frame_->set_text("fast-draw");
+        if (frame_) {
+            const std::wstring wideTitle = view->Doc().Title();
+            frame_->window_text(core::utf16_to_utf8(wideTitle) + " - fast-draw");
+        }
+    } else if (frame_) {
+        frame_->window_text("fast-draw");
     }
 }
 
-void MainWindow::Layout(const pf::isize extent) {
+void MainWindow::Layout(const core::sizei extent, const double dpiScale) {
     extent_ = extent;
-    dpiScale_ = frame_ ? frame_->get_dpi_scale() : 1.0;
+    dpiScale_ = dpiScale;
 
     const int sidebar = sidebarVisible_ ? ui::Scale(dpiScale_, kSidebarWidth) : 0;
     const int tabHeight = ui::Scale(dpiScale_, 34);
-    const int width = (std::max)(0, static_cast<int>(extent.cx));
-    const int height = (std::max)(0, static_cast<int>(extent.cy));
+    const int width = (std::max)(0, extent.cx);
+    const int height = (std::max)(0, extent.cy);
 
     tabBounds_ = {sidebar, 0, width, tabHeight};
     viewBounds_ = {sidebar, tabHeight, width, height};
@@ -276,21 +297,20 @@ void MainWindow::Layout(const pf::isize extent) {
     paletteBounds_ = {0, 0, sidebar, paletteHeight};
     styleBounds_ = {0, paletteHeight, sidebar, height};
 
-    tabBar_.SetExtent({(std::max)(0, static_cast<int>(tabBounds_.right - tabBounds_.left)),
-                       (std::max)(0, static_cast<int>(tabBounds_.bottom - tabBounds_.top))},
+    tabBar_.SetExtent({(std::max)(0, tabBounds_.right - tabBounds_.left),
+                       (std::max)(0, tabBounds_.bottom - tabBounds_.top)},
                       dpiScale_);
-    palette_.SetExtent({(std::max)(0, static_cast<int>(paletteBounds_.right - paletteBounds_.left)),
-                        (std::max)(0, static_cast<int>(paletteBounds_.bottom - paletteBounds_.top))},
+    palette_.SetExtent({(std::max)(0, paletteBounds_.right - paletteBounds_.left),
+                        (std::max)(0, paletteBounds_.bottom - paletteBounds_.top)},
                        dpiScale_);
-    stylePanel_.SetExtent({(std::max)(0, static_cast<int>(styleBounds_.right - styleBounds_.left)),
-                           (std::max)(0, static_cast<int>(styleBounds_.bottom - styleBounds_.top))},
+    stylePanel_.SetExtent({(std::max)(0, styleBounds_.right - styleBounds_.left),
+                           (std::max)(0, styleBounds_.bottom - styleBounds_.top)},
                           dpiScale_);
 
-    for (const auto& view : views_) {
-        view->SetViewport({(std::max)(0, static_cast<int>(viewBounds_.right - viewBounds_.left)),
-                           (std::max)(0, static_cast<int>(viewBounds_.bottom - viewBounds_.top))},
+    for (const auto& view : views_)
+        view->SetViewport({(std::max)(0, viewBounds_.right - viewBounds_.left),
+                           (std::max)(0, viewBounds_.bottom - viewBounds_.top)},
                           dpiScale_);
-    }
     Invalidate();
 }
 
@@ -356,28 +376,35 @@ void MainWindow::Render() {
     surface_.SetOpaque();
 }
 
-void MainWindow::RenderAndPresent() {
-    if (frame_) frame_->invalidate();
+void MainWindow::RenderForPaint() {
+    RenderIfDirty();
 }
 
-void MainWindow::OnIdle() {}
+void MainWindow::RenderIfDirty() {
+    if (!dirty_ && surface_.IsValid()) return;
+    Render();
+    dirty_ = false;
+}
 
 void MainWindow::OpenDocument() {
-    const pf::file_path selected = pf::open_file_path(
-        "Open fast-draw drawing", std::string_view(kFdrFilter, sizeof(kFdrFilter) - 1));
-    if (selected.empty()) return;
+    std::vector<core::file_path> selected;
+    const std::vector<platform::file_dialog_filter> filters = {
+        {"fast-draw drawings (*.fdr)", "*.fdr"}, {"All files (*.*)", "*.*"}};
+    if (!platform::prompt_for_open_paths(selected, filters, true)) return;
 
-    View* view = NewDocument();
-    const std::filesystem::path path = NativePath(selected);
-    const Document::ErrorHandler report =
-        [this](std::wstring_view action, const std::filesystem::path& failed,
-               std::string_view detail) { ReportDocumentError(action, failed, detail); };
-    if (!view->Doc().Load(path, report)) {
-        views_.pop_back();
-        activeIndex_ = views_.empty() ? -1 : static_cast<int>(views_.size()) - 1;
-        if (views_.empty()) NewDocument();
-        RefreshChrome();
-        Invalidate();
+    for (const core::file_path& file : selected) {
+        View* view = NewDocument();
+        const std::filesystem::path path = NativePath(file);
+        const Document::ErrorHandler report =
+            [this](std::wstring_view action, const std::filesystem::path& failed,
+                   std::string_view detail) { ReportDocumentError(action, failed, detail); };
+        if (!view->Doc().Load(path, report)) {
+            views_.pop_back();
+            activeIndex_ = views_.empty() ? -1 : static_cast<int>(views_.size()) - 1;
+            if (views_.empty()) NewDocument();
+            RefreshChrome();
+            Invalidate();
+        }
     }
 }
 
@@ -399,29 +426,32 @@ void MainWindow::OnCommand(const int id) {
         case ID_FILE_EXPORT_PNG: {
             if (!view) return;
             const std::wstring wideTitle = view->Doc().Title();
-            const pf::file_path selected = pf::save_file_path(
-                "Export PNG", pf::file_path(pf::utf16_to_utf8(wideTitle)),
-                std::string_view(kPngFilter, sizeof(kPngFilter) - 1));
-            if (selected.empty()) return;
+            core::file_path selected(core::utf16_to_utf8(wideTitle));
+            const std::vector<platform::file_dialog_filter> filters = {
+                {"PNG images (*.png)", "*.png"}, {"All files (*.*)", "*.*"}};
+            if (!platform::prompt_for_save_path(selected, filters)) return;
             if (!view->ExportPng(NativePath(selected)))
-                frame_->message_box("Could not write the image.", "fast-draw",
-                                    pf::msg_box_style::ok | pf::msg_box_style::icon_warning);
+                platform::message_box(nullptr, "Could not write the image.", "fast-draw",
+                                      {platform::message_box_buttons::ok,
+                                       platform::message_box_icon::warning});
             return;
         }
         case ID_APP_EXIT:
-            if (OnClose()) frame_->close();
+            if (frame_) frame_->close();
             return;
         case ID_APP_ABOUT:
-            frame_->message_box(
-                "fast-draw 2.0\n\nA small vector drawing program with its own renderer.",
-                "About fast-draw", pf::msg_box_style::ok);
+            platform::message_box(nullptr,
+                                  "fast-draw 2.0\n\nA small vector drawing program with its own renderer.",
+                                  "About fast-draw",
+                                  {platform::message_box_buttons::ok,
+                                   platform::message_box_icon::info});
             return;
         case ID_WINDOW_NEXT_TAB: StepTab(1); return;
         case ID_WINDOW_PREV_TAB: StepTab(-1); return;
         case ID_WINDOW_CLOSE_TAB: CloseTab(activeIndex_); return;
         case ID_VIEW_SIDEBAR:
             sidebarVisible_ = !sidebarVisible_;
-            Layout(extent_);
+            Layout(extent_, dpiScale_);
             return;
         default: break;
     }
@@ -431,178 +461,183 @@ void MainWindow::OnCommand(const int id) {
     }
 }
 
-void MainWindow::OnInitMenu() {
-    // pf::menu_command evaluates enabled/checked callbacks when it creates
-    // the native menu; there is no platform-handle state to synchronize here.
-}
-
 void MainWindow::InstallMenu() {
-    const auto viewEnabled = [this](const int id) {
-        return [this, id] {
-            bool enabled = false;
-            bool checked = false;
-            if (View* view = ActiveView()) view->QueryCommandState(id, enabled, checked);
-            return enabled;
-        };
-    };
-    const auto viewChecked = [this](const int id) {
-        return [this, id] {
-            bool enabled = false;
-            bool checked = false;
-            if (View* view = ActiveView()) view->QueryCommandState(id, enabled, checked);
-            return checked;
-        };
+    const auto accelerator = [](const char32_t key, const uint32_t state) {
+        return std::vector<platform::keyboard_accelerator_t>{{key, state}};
     };
     const auto leaf = [this](std::string text, const int id,
-                             const pf::key_binding accel = {},
-                             std::function<bool()> enabled = nullptr,
-                             std::function<bool()> checked = nullptr) {
-        pf::menu_command command;
-        command.text = std::move(text);
-        command.id = id;
-        command.action = [this, id] { OnCommand(id); };
-        command.accel = accel;
-        command.is_enabled = std::move(enabled);
-        command.is_checked = std::move(checked);
+                              std::vector<platform::keyboard_accelerator_t> kba = {}) {
+        auto command = std::make_shared<ui::command>();
+        command->text = std::move(text);
+        command->opaque = id;
+        command->kba = std::move(kba);
+        if (!command->kba.empty()) {
+            command->keyboard_accelerator_text =
+                platform::format_keyboard_accelerator(command->kba);
+        }
+        command->invoke = [this, id] { OnCommand(id); };
         return command;
     };
-    const auto separator = [] {
-        return pf::menu_command{};
-    };
-    const auto submenu = [](std::string text, std::vector<pf::menu_command> children) {
-        pf::menu_command command;
-        command.text = std::move(text);
-        command.children = std::move(children);
+    // The drawn menu draws a null entry as a separator.
+    const auto separator = [] { return ui::command_ptr{}; };
+    const auto submenu = [this](std::string text, std::vector<ui::command_ptr> children) {
+        auto command = std::make_shared<ui::command>();
+        command->text = std::move(text);
+        command->menu = [this, children = std::move(children)] {
+            RefreshCommandState(children);
+            return children;
+        };
         return command;
     };
 
-    using namespace pf::platform_key;
-    using namespace pf::key_mod;
-    std::vector<pf::menu_command> file{
-        leaf("&New", ID_FILE_NEW, {static_cast<unsigned int>('N'), ctrl}),
-        leaf("&Open...", ID_FILE_OPEN, {static_cast<unsigned int>('O'), ctrl}),
-        leaf("&Close", ID_FILE_CLOSE, {static_cast<unsigned int>('W'), ctrl},
-             [this] { return ActiveView() != nullptr; }),
-        leaf("&Save", ID_FILE_SAVE, {static_cast<unsigned int>('S'), ctrl},
-             [this] { return ActiveView() != nullptr; }),
-        leaf("Save &As...", ID_FILE_SAVE_AS, {}, [this] { return ActiveView() != nullptr; }),
-        leaf("E&xport as PNG...", ID_FILE_EXPORT_PNG, {},
-             [this] { return ActiveView() != nullptr; }),
+    const uint32_t ctrl = platform::keyboard_accelerator_t::control;
+    const uint32_t shift = platform::keyboard_accelerator_t::shift;
+    const auto ctrlKey = [&](const char32_t key) { return accelerator(key, ctrl); };
+    const auto ctrlShiftKey = [&](const char32_t key) { return accelerator(key, ctrl | shift); };
+
+    std::vector<ui::command_ptr> file{
+        leaf("&New", ID_FILE_NEW, ctrlKey(U'N')),
+        leaf("&Open...", ID_FILE_OPEN, ctrlKey(U'O')),
+        leaf("&Close", ID_FILE_CLOSE, ctrlKey(U'W')),
+        leaf("&Save", ID_FILE_SAVE, ctrlKey(U'S')),
+        leaf("Save &As...", ID_FILE_SAVE_AS),
+        leaf("E&xport as PNG...", ID_FILE_EXPORT_PNG),
         separator(),
-        leaf("&Print...", ID_FILE_PRINT, {static_cast<unsigned int>('P'), ctrl},
-             [this] { return ActiveView() != nullptr; }),
+        leaf("&Print...", ID_FILE_PRINT, ctrlKey(U'P')),
         separator(),
         leaf("E&xit", ID_APP_EXIT),
     };
 
-    std::vector<pf::menu_command> edit{
-        leaf("&Undo", ID_EDIT_UNDO, {static_cast<unsigned int>('Z'), ctrl}, viewEnabled(ID_EDIT_UNDO)),
-        leaf("&Redo", ID_EDIT_REDO, {static_cast<unsigned int>('Y'), ctrl}, viewEnabled(ID_EDIT_REDO)),
+    std::vector<ui::command_ptr> edit{
+        leaf("&Undo", ID_EDIT_UNDO, ctrlKey(U'Z')),
+        leaf("&Redo", ID_EDIT_REDO, ctrlKey(U'Y')),
         separator(),
-        leaf("Cu&t", ID_EDIT_CUT, {static_cast<unsigned int>('X'), ctrl}, viewEnabled(ID_EDIT_CUT)),
-        leaf("&Copy", ID_EDIT_COPY, {static_cast<unsigned int>('C'), ctrl}, viewEnabled(ID_EDIT_COPY)),
-        leaf("&Paste", ID_EDIT_PASTE, {static_cast<unsigned int>('V'), ctrl}, viewEnabled(ID_EDIT_PASTE)),
-        leaf("&Delete", ID_EDIT_CLEAR, {pf::platform_key::Delete, none}, viewEnabled(ID_EDIT_CLEAR)),
+        leaf("Cu&t", ID_EDIT_CUT, ctrlKey(U'X')),
+        leaf("&Copy", ID_EDIT_COPY, ctrlKey(U'C')),
+        leaf("&Paste", ID_EDIT_PASTE, ctrlKey(U'V')),
+        leaf("&Delete", ID_EDIT_CLEAR, accelerator(platform::keys::DEL, 0)),
         separator(),
-        leaf("D&uplicate", ID_EDIT_DUPLICATE, {static_cast<unsigned int>('D'), ctrl},
-             viewEnabled(ID_EDIT_DUPLICATE)),
-        leaf("Select &All", ID_EDIT_SELECT_ALL, {static_cast<unsigned int>('A'), ctrl},
-             viewEnabled(ID_EDIT_SELECT_ALL)),
-        leaf("Edit &Label", ID_EDIT_TEXT, {pf::platform_key::F2, none}, viewEnabled(ID_EDIT_TEXT)),
+        leaf("D&uplicate", ID_EDIT_DUPLICATE, ctrlKey(U'D')),
+        leaf("Select &All", ID_EDIT_SELECT_ALL, ctrlKey(U'A')),
+        leaf("Edit &Label", ID_EDIT_TEXT, accelerator(platform::keys::F2, 0)),
     };
-    edit[1].accel_alt = {static_cast<unsigned int>('Z'), static_cast<uint8_t>(ctrl | shift)};
+    edit[1]->kba.push_back({U'Z', ctrl | shift});
+    edit[1]->keyboard_accelerator_text =
+        platform::format_keyboard_accelerator(edit[1]->kba);
 
-    std::vector<pf::menu_command> pages{
-        leaf("&Letter Landscape", ID_PAGE_LETTER_LANDSCAPE, {}, viewEnabled(ID_PAGE_LETTER_LANDSCAPE),
-             viewChecked(ID_PAGE_LETTER_LANDSCAPE)),
-        leaf("Letter &Portrait", ID_PAGE_LETTER_PORTRAIT, {}, viewEnabled(ID_PAGE_LETTER_PORTRAIT),
-             viewChecked(ID_PAGE_LETTER_PORTRAIT)),
-        leaf("&A4 Landscape", ID_PAGE_A4_LANDSCAPE, {}, viewEnabled(ID_PAGE_A4_LANDSCAPE),
-             viewChecked(ID_PAGE_A4_LANDSCAPE)),
-        leaf("A&4 Portrait", ID_PAGE_A4_PORTRAIT, {}, viewEnabled(ID_PAGE_A4_PORTRAIT),
-             viewChecked(ID_PAGE_A4_PORTRAIT)),
-        leaf("A&3 Landscape", ID_PAGE_A3_LANDSCAPE, {}, viewEnabled(ID_PAGE_A3_LANDSCAPE),
-             viewChecked(ID_PAGE_A3_LANDSCAPE)),
+    std::vector<ui::command_ptr> pages{
+        leaf("&Letter Landscape", ID_PAGE_LETTER_LANDSCAPE),
+        leaf("Letter &Portrait", ID_PAGE_LETTER_PORTRAIT),
+        leaf("&A4 Landscape", ID_PAGE_A4_LANDSCAPE),
+        leaf("A&4 Portrait", ID_PAGE_A4_PORTRAIT),
+        leaf("A&3 Landscape", ID_PAGE_A3_LANDSCAPE),
     };
-    std::vector<pf::menu_command> view{
-        leaf("Zoom &In", ID_VIEW_ZOOM_IN, {pf::platform_key::Equals, ctrl}, viewEnabled(ID_VIEW_ZOOM_IN)),
-        leaf("Zoom &Out", ID_VIEW_ZOOM_OUT, {pf::platform_key::Minus, ctrl}, viewEnabled(ID_VIEW_ZOOM_OUT)),
-        leaf("&Actual Size", ID_VIEW_ZOOM_ACTUAL, {static_cast<unsigned int>('0'), ctrl},
-             viewEnabled(ID_VIEW_ZOOM_ACTUAL)),
-        leaf("&Fit Page", ID_VIEW_ZOOM_FIT, {static_cast<unsigned int>('9'), ctrl},
-             viewEnabled(ID_VIEW_ZOOM_FIT)),
+    std::vector<ui::command_ptr> view{
+        leaf("Zoom &In", ID_VIEW_ZOOM_IN, {
+            {platform::keys::OEM_PLUS, ctrl}, {platform::keys::ADD, ctrl}}),
+        leaf("Zoom &Out", ID_VIEW_ZOOM_OUT, {
+            {platform::keys::OEM_MINUS, ctrl}, {platform::keys::SUBTRACT, ctrl}}),
+        leaf("&Actual Size", ID_VIEW_ZOOM_ACTUAL, ctrlKey(U'0')),
+        leaf("&Fit Page", ID_VIEW_ZOOM_FIT, ctrlKey(U'9')),
         separator(),
-        leaf("&Grid", ID_VIEW_GRID, {}, viewEnabled(ID_VIEW_GRID), viewChecked(ID_VIEW_GRID)),
-        leaf("S&nap to Grid", ID_VIEW_SNAP, {}, viewEnabled(ID_VIEW_SNAP), viewChecked(ID_VIEW_SNAP)),
-        leaf("&Paper Colour...", ID_VIEW_PAPER_COLOUR, {}, viewEnabled(ID_VIEW_PAPER_COLOUR)),
+        leaf("&Grid", ID_VIEW_GRID),
+        leaf("S&nap to Grid", ID_VIEW_SNAP),
+        leaf("&Paper Colour...", ID_VIEW_PAPER_COLOUR),
         submenu("Page Si&ze", std::move(pages)),
         separator(),
-        leaf("&Sidebar", ID_VIEW_SIDEBAR, {}, nullptr, [this] { return sidebarVisible_; }),
+        leaf("&Sidebar", ID_VIEW_SIDEBAR),
     };
-    view[0].accel_alt = {pf::platform_key::Add, ctrl};
-    view[1].accel_alt = {pf::platform_key::Subtract, ctrl};
 
-    std::vector<pf::menu_command> arrange{
-        leaf("Bring to &Front", ID_OBJECT_FRONT, {}, viewEnabled(ID_OBJECT_FRONT)),
-        leaf("Send to &Back", ID_OBJECT_BACK, {}, viewEnabled(ID_OBJECT_BACK)),
-        leaf("Bring F&orward", ID_OBJECT_FORWARD, {}, viewEnabled(ID_OBJECT_FORWARD)),
-        leaf("Send Back&ward", ID_OBJECT_BACKWARD, {}, viewEnabled(ID_OBJECT_BACKWARD)),
+    std::vector<ui::command_ptr> arrange{
+        leaf("Bring to &Front", ID_OBJECT_FRONT),
+        leaf("Send to &Back", ID_OBJECT_BACK),
+        leaf("Bring F&orward", ID_OBJECT_FORWARD),
+        leaf("Send Back&ward", ID_OBJECT_BACKWARD),
         separator(),
-        leaf("Align &Left", ID_OBJECT_ALIGN_LEFT, {}, viewEnabled(ID_OBJECT_ALIGN_LEFT)),
-        leaf("Align &Centre", ID_OBJECT_ALIGN_CENTRE, {}, viewEnabled(ID_OBJECT_ALIGN_CENTRE)),
-        leaf("Align &Right", ID_OBJECT_ALIGN_RIGHT, {}, viewEnabled(ID_OBJECT_ALIGN_RIGHT)),
-        leaf("Align &Top", ID_OBJECT_ALIGN_TOP, {}, viewEnabled(ID_OBJECT_ALIGN_TOP)),
-        leaf("Align &Middle", ID_OBJECT_ALIGN_MIDDLE, {}, viewEnabled(ID_OBJECT_ALIGN_MIDDLE)),
-        leaf("Align Botto&m", ID_OBJECT_ALIGN_BOTTOM, {}, viewEnabled(ID_OBJECT_ALIGN_BOTTOM)),
+        leaf("Align &Left", ID_OBJECT_ALIGN_LEFT),
+        leaf("Align &Centre", ID_OBJECT_ALIGN_CENTRE),
+        leaf("Align &Right", ID_OBJECT_ALIGN_RIGHT),
+        leaf("Align &Top", ID_OBJECT_ALIGN_TOP),
+        leaf("Align &Middle", ID_OBJECT_ALIGN_MIDDLE),
+        leaf("Align Botto&m", ID_OBJECT_ALIGN_BOTTOM),
     };
-    std::vector<pf::menu_command> window{
-        leaf("&Next Tab", ID_WINDOW_NEXT_TAB, {pf::platform_key::Tab, ctrl}),
-        leaf("&Previous Tab", ID_WINDOW_PREV_TAB, {pf::platform_key::Tab, ctrl | shift}),
-        leaf("&Close Tab", ID_WINDOW_CLOSE_TAB, {static_cast<unsigned int>('W'), ctrl},
-             [this] { return ActiveView() != nullptr; }),
+    std::vector<ui::command_ptr> window{
+        leaf("&Next Tab", ID_WINDOW_NEXT_TAB, ctrlKey(platform::keys::TAB)),
+        leaf("&Previous Tab", ID_WINDOW_PREV_TAB, ctrlShiftKey(platform::keys::TAB)),
+        leaf("&Close Tab", ID_WINDOW_CLOSE_TAB, ctrlKey(U'W')),
     };
-    std::vector<pf::menu_command> help{leaf("&About fast-draw...", ID_APP_ABOUT)};
+    std::vector<ui::command_ptr> help{leaf("&About fast-draw...", ID_APP_ABOUT)};
 
-    frame_->set_menu({
-        submenu("&File", std::move(file)),
-        submenu("&Edit", std::move(edit)),
-        submenu("&View", std::move(view)),
-        submenu("&Arrange", std::move(arrange)),
-        submenu("&Window", std::move(window)),
-        submenu("&Help", std::move(help)),
-    });
+    menus_ = {
+        submenu("&File", std::move(file)), submenu("&Edit", std::move(edit)),
+        submenu("&View", std::move(view)), submenu("&Arrange", std::move(arrange)),
+        submenu("&Window", std::move(window)), submenu("&Help", std::move(help)),
+    };
+    menuBar_ = ui::make_menu_bar(menus_);
+    RefreshMenuState();
 }
+
+void MainWindow::RefreshCommandState(const std::vector<ui::command_ptr>& commands) {
+    const auto needs_view = [](const int id) {
+        switch (id) {
+            case ID_FILE_NEW:
+            case ID_APP_EXIT:
+            case ID_APP_ABOUT:
+            case ID_VIEW_SIDEBAR:
+            case ID_WINDOW_NEXT_TAB:
+            case ID_WINDOW_PREV_TAB: return false;
+            default: return true;
+        }
+    };
+
+    for (const auto& command : commands) {
+        if (!command) continue;
+        if (command->opaque.has_value()) {
+            const int id = std::any_cast<int>(command->opaque);
+            bool enabled = !needs_view(id);
+            bool checked = false;
+            if (View* view = ActiveView()) {
+                view->QueryCommandState(id, enabled, checked);
+            }
+            if (id == ID_VIEW_SIDEBAR) checked = sidebarVisible_;
+            command->enable = enabled;
+            command->checked = checked;
+        }
+        if (command->menu) RefreshCommandState(command->menu());
+    }
+}
+
+void MainWindow::RefreshMenuState() { RefreshCommandState(menus_); }
 
 std::optional<Color> MainWindow::PickColour(const Color initial) {
     std::optional<Color> selected;
-    std::vector<pf::menu_command> colours;
+    std::vector<ui::command_ptr> colours;
     int index = 0;
     for (const Color colour : PaletteColours()) {
-        pf::menu_command command;
-        command.text = "Colour " + std::to_string(index++);
-        command.is_checked = [initial, colour] { return colour == initial; };
-        command.action = [&selected, colour] { selected = colour; };
+        auto command = std::make_shared<ui::command>();
+        command->text = "Colour " + std::to_string(index++);
+        command->checked = colour == initial;
+        command->invoke = [&selected, colour] { selected = colour; };
         colours.push_back(std::move(command));
     }
-    frame_->show_popup_menu(colours, pf::platform_cursor_pos());
+
+    const core::pointi cursor = platform::cursor_position();
+    frame_->track_menu(core::recti(cursor, core::sizei{}), colours);
     return selected;
 }
 
-void MainWindow::ShowContextMenu(const Point point) {
-    if (!frame_) return;
-    View* view = ActiveView();
-    std::vector<pf::menu_command> items;
-    auto add = [&](std::string text, const int id) {
-        pf::menu_command command;
-        command.text = std::move(text);
-        command.id = id;
-        command.action = [this, id] { OnCommand(id); };
-        command.is_enabled = [view, id] {
-            bool enabled = false;
-            bool checked = false;
-            if (view) view->QueryCommandState(id, enabled, checked);
-            return enabled;
-        };
+std::vector<ui::command_ptr> MainWindow::BuildContextMenu() const {
+    std::vector<ui::command_ptr> items;
+    const auto add = [this, &items](std::string text, const int id) {
+        auto command = std::make_shared<ui::command>();
+        command->text = std::move(text);
+        command->opaque = id;
+        command->invoke = [this, id] { const_cast<MainWindow*>(this)->OnCommand(id); };
+        bool enabled = false;
+        bool checked = false;
+        if (View* view = ActiveView()) view->QueryCommandState(id, enabled, checked);
+        command->enable = enabled;
+        command->checked = checked;
         items.push_back(std::move(command));
     };
     add("Cut", ID_EDIT_CUT);
@@ -612,7 +647,13 @@ void MainWindow::ShowContextMenu(const Point point) {
     add("Edit Label", ID_EDIT_TEXT);
     add("Bring to Front", ID_OBJECT_FRONT);
     add("Send to Back", ID_OBJECT_BACK);
-    frame_->show_popup_menu(items, {point.x, point.y});
+    return items;
+}
+
+void MainWindow::ShowContextMenu(const Point point) {
+    if (!frame_) return;
+    const core::recti anchor{point.x, point.y, point.x + 1, point.y + 1};
+    frame_->track_menu(anchor, BuildContextMenu());
 }
 
 bool MainWindow::OnClose() {
@@ -625,164 +666,260 @@ void MainWindow::ReportDocumentError(const std::wstring_view action,
                                      const std::filesystem::path& path,
                                      const std::string_view detail) const {
     const std::wstring message = ErrorMessage(action, path, detail);
-    frame_->message_box(pf::utf16_to_utf8(message), "fast-draw",
-                        pf::msg_box_style::ok | pf::msg_box_style::icon_warning);
+    platform::message_box(nullptr, core::utf16_to_utf8(message), "fast-draw",
+                          {platform::message_box_buttons::ok,
+                           platform::message_box_icon::warning});
 }
 
-uint32_t MainWindow::handle_message(pf::window_frame_ptr window,
-                                     const pf::message_type message,
-                                     const pf::message_params& params) {
-    switch (message) {
-        case pf::message_type::create: {
-            frame_ = window;
-            frame_->set_text("fast-draw");
-            ConfigureControls();
-            InstallMenu();
-            if (views_.empty()) {
-                if (startupPaths_.empty()) {
-                    NewDocument();
-                } else {
-                    const auto paths = std::move(startupPaths_);
-                    for (const auto& path : paths) {
-                        View* view = NewDocument();
-                        const std::filesystem::path file = NativePath(path);
-                        const Document::ErrorHandler report =
-                            [this](std::wstring_view action, const std::filesystem::path& failed,
-                                   std::string_view detail) {
-                                ReportDocumentError(action, failed, detail);
-                            };
-                        view->Doc().Load(file, report);
-                    }
-                }
+namespace {
+
+#ifdef _WIN32
+platform::window* NativePlatformWindow(const ui::frame_ptr& frame) {
+    if (!frame) return nullptr;
+    const std::any handle = frame->handle();
+    const auto hwnd = std::any_cast<HWND>(&handle);
+    return hwnd ? ::platform_window_from_native(*hwnd) : nullptr;
+}
+#endif
+
+}  // namespace
+
+bool MainWindow::load_settings(const platform::setting_file_ptr& store) {
+    settings_ = store;
+    return true;
+}
+
+bool MainWindow::init(const std::string_view) {
+    if (!settings_) settings_ = platform::settings();
+
+    ui::frame_style style;
+    style.drawn_caption = false;
+    style.hardware_accelerated = false;
+    style.resizable = true;
+
+    frame_ = ui::create_app_frame(shared_from_this(), settings_, shared_from_this(), style);
+    if (!frame_) return false;
+    frame_->window_text("fast-draw");
+
+    if (views_.empty()) {
+        if (startupPaths_.empty()) {
+            NewDocument();
+        } else {
+            const auto paths = std::move(startupPaths_);
+            for (const core::file_path& file : paths) {
+                View* view = NewDocument();
+                const std::filesystem::path path = NativePath(file);
+                const Document::ErrorHandler report =
+                    [this](std::wstring_view action, const std::filesystem::path& failed,
+                           std::string_view detail) { ReportDocumentError(action, failed, detail); };
+                view->Doc().Load(path, report);
             }
-            Layout({static_cast<int>(window->get_client_rect().width()),
-                    static_cast<int>(window->get_client_rect().height())});
-            return 0;
         }
-        case pf::message_type::erase_background: return 1;
-        case pf::message_type::close:
-            if (OnClose()) window->close();
-            return 0;
-        case pf::message_type::timer:
-            if (View* view = ActiveView()) view->OnTimer(params.timer_id);
-            return 0;
-        case pf::message_type::dpi_changed:
-            dpiScale_ = params.dpi_scale;
-            Layout(extent_);
-            return 0;
-        case pf::message_type::destroy:
-            captured_ = false;
-            return 0;
-        default: return 0;
+    }
+
+    platform::set_frame_delay(500);
+    RefreshChrome();
+    frame_->focus();
+    return true;
+}
+
+void MainWindow::frame_tick() {
+    if (View* view = ActiveView()) view->OnTimer(1);
+}
+
+bool MainWindow::can_exit() { return OnClose(); }
+
+void MainWindow::final_exit() {
+    platform::set_frame_delay(0);
+    frame_.reset();
+}
+
+void MainWindow::on_window_layout(render::measure_context& mc, const core::sizei extent,
+                                  const bool is_minimized) {
+    if (is_minimized || !menuBar_ || !surfaceElement_) return;
+    dpiScale_ = mc.scale_factor;
+    const int measured = menuBar_->measure(mc, extent.cx).cy;
+    menuHeight_ = (std::max)(1, measured);
+    menuBar_->layout(mc, {0, 0, extent.cx, menuHeight_});
+    const core::sizei body{extent.cx, (std::max)(0, extent.cy - menuHeight_)};
+    surfaceElement_->layout(mc, {0, menuHeight_, extent.cx, extent.cy});
+    Layout(body, dpiScale_);
+}
+
+void MainWindow::on_window_paint(render::draw_context& dc) {
+    // The frame host owns the paint order: menu first, then the app-owned surface.
+    if (menuBar_) menuBar_->render(dc, {});
+    if (surfaceElement_) surfaceElement_->render(dc, {});
+}
+
+void MainWindow::visit_elements(
+    const std::function<void(const ui::element_ptr&, core::pointi)>& visit) {
+    if (menuBar_) visit(menuBar_, {});
+    if (surfaceElement_) visit(surfaceElement_, {});
+}
+
+void MainWindow::on_window_destroy() {
+    captured_ = false;
+    captureTarget_ = CaptureTarget::none;
+}
+
+void MainWindow::SetCapture(const bool capture) {
+#ifdef _WIN32
+    if (auto* const window = NativePlatformWindow(frame_)) window->capture(capture);
+#else
+    (void)capture;
+#endif
+}
+
+MainWindow::CaptureTarget MainWindow::Route(const core::pointi point) const {
+    if (captured_) return captureTarget_;
+    if (point.y < menuHeight_) return CaptureTarget::none;
+    const Point local{point.x, point.y - menuHeight_};
+    const Rect tab{tabBounds_.left, tabBounds_.top, tabBounds_.right, tabBounds_.bottom};
+    const Rect palette{paletteBounds_.left, paletteBounds_.top,
+                       paletteBounds_.right, paletteBounds_.bottom};
+    const Rect style{styleBounds_.left, styleBounds_.top, styleBounds_.right, styleBounds_.bottom};
+    const Rect view{viewBounds_.left, viewBounds_.top, viewBounds_.right, viewBounds_.bottom};
+    if (Contains(view, local)) return CaptureTarget::view;
+    if (Contains(tab, local)) return CaptureTarget::tabs;
+    if (Contains(palette, local)) return CaptureTarget::palette;
+    if (Contains(style, local)) return CaptureTarget::style;
+    return CaptureTarget::none;
+}
+
+Point MainWindow::LocalPoint(const CaptureTarget target, const core::pointi point) const {
+    const Point local{point.x, point.y - menuHeight_};
+    switch (target) {
+        case CaptureTarget::view: return {local.x - viewBounds_.left, local.y - viewBounds_.top};
+        case CaptureTarget::tabs: return {local.x - tabBounds_.left, local.y - tabBounds_.top};
+        case CaptureTarget::palette: return {local.x - paletteBounds_.left, local.y - paletteBounds_.top};
+        case CaptureTarget::style: return {local.x - styleBounds_.left, local.y - styleBounds_.top};
+        case CaptureTarget::none: return local;
+    }
+    return local;
+}
+
+void MainWindow::on_mouse_move(const core::pointi loc, const bool) {
+    const auto route = Route(loc);
+    const auto keys = platform::current_key_state();
+    const bool alt = keys.alt;
+    if (route == CaptureTarget::view) {
+        if (View* view = ActiveView()) view->OnMouseMove(LocalPoint(route, loc), keys.shift, keys.control, alt);
+    } else if (route == CaptureTarget::tabs) {
+        tabBar_.OnMouseMove(LocalPoint(route, loc));
+    } else if (route == CaptureTarget::palette) {
+        palette_.OnMouseMove(LocalPoint(route, loc));
+    } else if (route == CaptureTarget::style) {
+        stylePanel_.OnMouseMove(LocalPoint(route, loc));
     }
 }
 
-void MainWindow::handle_size(pf::window_frame_ptr&, const pf::isize extent,
-                             pf::measure_context&) {
-    Layout(extent);
+void MainWindow::on_mouse_leave(const core::pointi) {
+    tabBar_.OnMouseLeave();
+    palette_.OnMouseLeave();
+    stylePanel_.OnMouseLeave();
 }
 
-uint32_t MainWindow::handle_mouse(pf::window_frame_ptr,
-                                   const pf::mouse_message_type message,
-                                   const pf::mouse_params& params) {
-    const Point point{params.point.x, params.point.y};
-    const auto route = captured_ ? captureTarget_
-                                 : Contains(viewBounds_, point) ? CaptureTarget::view
-                                 : Contains(tabBounds_, point) ? CaptureTarget::tabs
-                                 : Contains(paletteBounds_, point) ? CaptureTarget::palette
-                                 : Contains(styleBounds_, point) ? CaptureTarget::style
-                                                                    : CaptureTarget::none;
-
-    auto view = ActiveView();
-    const bool alt = frame_->is_key_down_async(pf::platform_key::Alt);
-
-    switch (message) {
-        case pf::mouse_message_type::left_button_down:
-            if (route == CaptureTarget::view && view)
-                view->OnLeftDown(LocalPoint(viewBounds_, point), params.shift, params.control, alt);
-            else if (route == CaptureTarget::tabs)
-                tabBar_.OnLeftDown(LocalPoint(tabBounds_, point));
-            else if (route == CaptureTarget::palette)
-                palette_.OnLeftDown(LocalPoint(paletteBounds_, point));
-            else if (route == CaptureTarget::style)
-                stylePanel_.OnLeftDown(LocalPoint(styleBounds_, point));
-            return 0;
-        case pf::mouse_message_type::left_button_up:
-            if (captureTarget_ == CaptureTarget::view && view)
-                view->OnLeftUp(LocalPoint(viewBounds_, point), params.shift, params.control, alt);
-            else if (captureTarget_ == CaptureTarget::tabs)
-                tabBar_.OnLeftUp(LocalPoint(tabBounds_, point));
-            else if (captureTarget_ == CaptureTarget::palette)
-                palette_.OnLeftUp(LocalPoint(paletteBounds_, point));
-            else if (captureTarget_ == CaptureTarget::style)
-                stylePanel_.OnLeftUp(LocalPoint(styleBounds_, point));
-            return 0;
-        case pf::mouse_message_type::left_button_dbl_clk:
-            if (route == CaptureTarget::view && view)
-                view->OnDoubleClick(LocalPoint(viewBounds_, point), params.shift, params.control, alt);
-            return 0;
-        case pf::mouse_message_type::mouse_move:
-            if (route == CaptureTarget::view && view)
-                view->OnMouseMove(LocalPoint(viewBounds_, point), params.shift, params.control, alt);
-            else if (route == CaptureTarget::tabs)
-                tabBar_.OnMouseMove(LocalPoint(tabBounds_, point));
-            else if (route == CaptureTarget::palette)
-                palette_.OnMouseMove(LocalPoint(paletteBounds_, point));
-            else if (route == CaptureTarget::style)
-                stylePanel_.OnMouseMove(LocalPoint(styleBounds_, point));
-            return 0;
-        case pf::mouse_message_type::mouse_leave:
-            tabBar_.OnMouseLeave();
-            palette_.OnMouseLeave();
-            stylePanel_.OnMouseLeave();
-            return 0;
-        case pf::mouse_message_type::mouse_wheel:
-            if (route == CaptureTarget::view && view)
-                view->OnMouseWheel(LocalPoint(viewBounds_, point), params.wheel_delta,
-                                   params.control, params.shift);
-            return 0;
-        case pf::mouse_message_type::middle_button_up:
-            if (route == CaptureTarget::tabs)
-                tabBar_.OnMiddleUp(LocalPoint(tabBounds_, point));
-            return 0;
-        case pf::mouse_message_type::right_button_down:
-            if (route == CaptureTarget::view && view)
-                view->OnContextMenu(LocalPoint(viewBounds_, point));
-            return 0;
-        default: return 0;
+void MainWindow::on_mouse_left_button_down(const core::pointi loc,
+                                           const platform::key_state keys) {
+    const auto route = Route(loc);
+    if (route == CaptureTarget::view) {
+        if (View* view = ActiveView()) view->OnLeftDown(LocalPoint(route, loc), keys.shift, keys.control, keys.alt);
+    } else if (route == CaptureTarget::tabs) {
+        tabBar_.OnLeftDown(LocalPoint(route, loc));
+    } else if (route == CaptureTarget::palette) {
+        palette_.OnLeftDown(LocalPoint(route, loc));
+    } else if (route == CaptureTarget::style) {
+        stylePanel_.OnLeftDown(LocalPoint(route, loc));
     }
 }
 
-uint32_t MainWindow::handle_keyboard(pf::window_frame_ptr,
-                                      const pf::keyboard_message_type message,
-                                      const pf::keyboard_params& params) {
+void MainWindow::on_mouse_left_button_up(const core::pointi loc,
+                                         const platform::key_state keys) {
+    const auto route = captured_ ? captureTarget_ : Route(loc);
+    if (route == CaptureTarget::view) {
+        if (View* view = ActiveView()) view->OnLeftUp(LocalPoint(route, loc), keys.shift, keys.control, keys.alt);
+    } else if (route == CaptureTarget::tabs) {
+        tabBar_.OnLeftUp(LocalPoint(route, loc));
+    } else if (route == CaptureTarget::palette) {
+        palette_.OnLeftUp(LocalPoint(route, loc));
+    } else if (route == CaptureTarget::style) {
+        stylePanel_.OnLeftUp(LocalPoint(route, loc));
+    }
+}
+
+void MainWindow::on_mouse_middle_button_up(const core::pointi loc,
+                                           const platform::key_state) {
+    if (Route(loc) == CaptureTarget::tabs) tabBar_.OnMiddleUp(LocalPoint(CaptureTarget::tabs, loc));
+}
+
+void MainWindow::on_mouse_left_button_double_click(const core::pointi loc,
+                                                   const platform::key_state keys) {
+    if (Route(loc) == CaptureTarget::view)
+        if (View* view = ActiveView())
+            view->OnDoubleClick(LocalPoint(CaptureTarget::view, loc), keys.shift, keys.control, keys.alt);
+}
+
+void MainWindow::on_mouse_wheel(const core::pointi loc, const int delta,
+                                const platform::key_state keys, bool& was_handled) {
+    if (Route(loc) == CaptureTarget::view)
+        if (View* view = ActiveView()) {
+            view->OnMouseWheel(LocalPoint(CaptureTarget::view, loc), delta, keys.control, keys.shift);
+            was_handled = true;
+        }
+}
+
+bool MainWindow::key_down(const char32_t key, const platform::key_state keys) {
+    // Alt and system keys belong to Windows so close and system-menu commands survive.
+    if (keys.alt || key == platform::keys::F10) return false;
+    RefreshMenuState();
+    if (ui::dispatch_accelerator(menus_, key, keys)) return true;
+    if (View* view = ActiveView()) return view->OnKeyDown(key, keys.shift);
+    return false;
+}
+
+bool MainWindow::text_input(const std::string_view text) {
     View* view = ActiveView();
-    if (!view) return 0;
-    if (message == pf::keyboard_message_type::key_down) {
-        const bool repeatable = params.vk == pf::platform_key::Left ||
-                                params.vk == pf::platform_key::Right ||
-                                params.vk == pf::platform_key::Up ||
-                                params.vk == pf::platform_key::Down;
-        if (!params.repeat || repeatable)
-            view->OnKeyDown(params.vk,
-                            frame_->is_key_down_async(pf::platform_key::Shift));
-    } else if (message == pf::keyboard_message_type::char_input) {
-        view->OnChar(params.ch);
-    }
-    return 0;
+    if (!view || !view->IsEditing()) return false;
+    auto it = text.begin();
+    while (it != text.end()) view->OnChar(static_cast<char32_t>(core::pop_utf8_char(it, text.end())));
+    return true;
 }
 
-void MainWindow::handle_paint(pf::window_frame_ptr&, pf::draw_context& draw) {
-    if (dirty_ || !surface_.IsValid()) {
-        Render();
-        dirty_ = false;
-    }
-    if (!surface_.IsValid()) return;
-
-    pf::bitmap bitmap(surface_.Width(), surface_.Height(),
-                      std::vector<std::uint32_t>(surface_.Pixels(),
-                                                 surface_.Pixels() +
-                                                     static_cast<std::ptrdiff_t>(
-                                                         surface_.Width()) * surface_.Height()));
-    draw.draw_bitmap(0, 0, bitmap);
+ui::focus_mode MainWindow::focus_mode() const {
+    if (const View* view = ActiveView())
+        return view->IsEditing() ? ui::focus_mode::text_edit : ui::focus_mode::view;
+    return ui::focus_mode::none;
 }
+
+void MainWindow::track_menu(const ui::frame_ptr& parent, const core::recti bounds,
+                            const std::vector<ui::command_ptr>& commands) {
+    if (parent) parent->track_menu(bounds, commands);
+}
+
+bool MainWindow::key_down(const int, const platform::key_state) {
+    return false;
+}
+
+std::vector<ui::command_ptr> MainWindow::menu(const core::pointi screen) {
+#ifdef _WIN32
+    if (auto* const window = NativePlatformWindow(frame_)) {
+        const auto client = window->screen_to_client(screen);
+        const auto route = Route(client);
+        if (route != CaptureTarget::view) return {};
+        if (View* view = ActiveView()) {
+            view->OnContextMenu(LocalPoint(route, client));
+            RefreshMenuState();
+            return BuildContextMenu();
+        }
+    }
+#else
+    (void)screen;
+#endif
+    return {};
+}
+
+void MainWindow::on_mouse_other_button_up(const platform::other_mouse_button&, const core::pointi,
+                                          const platform::key_state) {
+}
+

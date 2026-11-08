@@ -4,8 +4,9 @@
 
 A small, fast vector drawing program for Windows, aimed at system architecture
 diagrams and quick sketches. A C++20 application using libdesktop's shared
-window/reactor/input layer and its own anti-aliased software renderer — the tab
-strip, sidebar, shape palette and colour controls remain app-owned drawing.
+core, platform, render and ui libraries and its own anti-aliased software
+renderer — the tab strip, sidebar, shape palette and colour controls remain
+app-owned drawing presented through the UI element tree.
 
 Back in the late 1990s and early 2000s I worked on a Windows application to draw
 business process diagrams at a company called Casewise. It was cool because you

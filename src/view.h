@@ -1,11 +1,11 @@
 // The drawing surface for one document: scrolling, zooming, selection, the
 // drawing tools and in-place label editing.  The view is an app-owned model
-// and renderer.  Its containing window is libdesktop's pf::window_frame.
+// and renderer.  Its containing window is libdesktop's ui::frame.
 
 #pragma once
 
 #include "document.h"
-#include "platform.h"
+#include "libdesktop/ui.h"
 #include "shapes.h"
 #include "style.h"
 #include "ui.h"
@@ -30,7 +30,7 @@ struct Tool {
 class View {
 public:
     explicit View(std::unique_ptr<Document> document,
-                  pf::window_frame_ptr frame = {});
+                  ui::frame_ptr frame = {});
     ~View();
 
     View(const View&) = delete;
@@ -71,22 +71,23 @@ public:
     void Render(Renderer& renderer, Canvas& canvas) const;
     bool ExportPng(const std::filesystem::path& path) const;
 
-    // Input delivered by MainWindow's pf::frame_reactor.
+    // Input delivered by MainWindow's ui::frame_host.
     void OnLeftDown(Point point, bool shift, bool control, bool alt);
     void OnLeftUp(Point point, bool shift, bool control, bool alt);
     void OnMouseMove(Point point, bool shift, bool control, bool alt);
     void OnDoubleClick(Point point, bool shift, bool control, bool alt);
     void OnMouseWheel(Point point, int delta, bool control, bool shift);
-    void OnKeyDown(unsigned int key, bool shift);
+    bool OnKeyDown(char32_t key, bool shift);
     void OnChar(char32_t character);
     void OnTimer(unsigned int id);
+    bool IsEditing() const { return editing_ != ObjectId::None; }
     void OnContextMenu(Point point);
 
     // Raised when the selection, the style or the modified flag changes.
     std::function<void()> onChanged;
     std::function<void()> onInvalidate;
     std::function<void(bool)> onCapture;
-    std::function<void(pf::cursor_shape)> onCursor;
+    std::function<void(platform::cursor)> onCursor;
     std::function<std::optional<Color>(Color)> onPickColour;
     std::function<void()> onContextMenuRequested;
 
@@ -140,9 +141,9 @@ private:
 
     void Invalidate() const;
     void Changed();
-    void SetCursor(pf::cursor_shape cursor) const;
+    void SetCursor(platform::cursor cursor) const;
 
-    pf::window_frame_ptr frame_;
+    ui::frame_ptr frame_;
     std::unique_ptr<Document> document_;
 
     Size viewport_{};

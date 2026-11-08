@@ -1,45 +1,51 @@
 #include "file_io.h"
 
-#include "platform.h"
+#include "libdesktop/platform.h"
+
+#include <limits>
 
 namespace {
 
-pf::file_path PlatformPath(const std::filesystem::path& path) {
-    return pf::file_path(pf::utf16_to_utf8(path.wstring()));
+core::file_path PlatformPath(const std::filesystem::path& path) {
+    return core::file_path(core::utf16_to_utf8(path.wstring()));
 }
 
 [[noreturn]] void ThrowFileOperation(const char* operation,
-                                     const pf::file_operation_result& result) {
+                                     const platform::file_op_result& result) {
     std::string message = operation;
     message += ": ";
-    message += result.message.empty() ? "file operation failed" : result.message;
+    message += result.error_message.empty() ? "file operation failed" : result.error_message;
     throw FileError(std::move(message));
+}
+
+[[noreturn]] void ThrowFileOperation(const char* operation) {
+    throw FileError(std::string(operation) + ": file operation failed");
 }
 
 }  // namespace
 
 std::string ReadFileText(const std::filesystem::path& path) {
-    const auto opened = pf::open_for_read_result(PlatformPath(path), true);
-    if (!opened.success()) ThrowFileOperation("cannot open the file", opened.result);
+    const auto file = platform::open_file(PlatformPath(path), platform::file_open_mode::read_shared);
+    if (!file) ThrowFileOperation("cannot open the file");
 
-    const std::uint32_t size = opened.file->size();
+    const std::uint64_t size64 = file->size();
+    if (size64 > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+        throw FileError("cannot read the file: it is too large");
+    const std::size_t size = static_cast<std::size_t>(size64);
     std::string text(size, '\0');
-    std::uint32_t offset = 0;
+    std::size_t offset = 0;
     while (offset < size) {
-        std::uint32_t read = 0;
-        if (!opened.file->read(reinterpret_cast<std::uint8_t*>(text.data()) + offset,
-                               size - offset, &read) ||
-            read == 0)
-            ThrowFileOperation("cannot read the file", opened.result);
-        offset += read;
+        const std::uint64_t read = file->read(reinterpret_cast<std::uint8_t*>(text.data()) + offset,
+                                              size - offset);
+        if (read == 0) ThrowFileOperation("cannot read the file");
+        offset += static_cast<std::size_t>(read);
     }
     return text;
 }
 
 void WriteFileBytes(const std::filesystem::path& path,
                     const std::span<const std::uint8_t> bytes) {
-    const auto opened =
-        pf::create_atomic_file_writer_result(PlatformPath(path));
+    const auto opened = platform::create_atomic_file_writer_result(PlatformPath(path));
     if (!opened.success()) ThrowFileOperation("cannot open the file for writing", opened.result);
 
     auto result = opened.writer->write(bytes);

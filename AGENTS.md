@@ -37,8 +37,10 @@ and [command set](https://github.com/ZacWalk/dd/blob/main/docs/cli.md#commands).
 ## Conventions
 
 - The app target is `fast-draw`; the CTest label is also `fast-draw`.
-- libdesktop's `pf::window_frame` and `pf::frame_reactor` own entry point,
-  message loop, input, menus, dialogs, DPI, and pixel presentation. The app
-  keeps its document model and explicit software rasterizer in `src/`.
+- The application owns `main` and returns `platform::run`; `ui::app` supplies
+  lifecycle callbacks, while `ui::frame`/`frame_host` provide the native frame,
+  input, drawn menus, dialogs, DPI and pixel presentation. The app keeps its
+  document model and explicit software rasterizer in `src/`
+  and presents it as a UI element.
 - libfiles owns PNG encoding and the zlib/libpng recipe. Do not add a direct
   codec recipe or a second PNG implementation.

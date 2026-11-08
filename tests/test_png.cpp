@@ -1,9 +1,14 @@
 #include "test_framework.h"
 
 #include "canvas.h"
+#include "document.h"
+#include "ui.h"
+#include "view.h"
 #include "file_io.h"
 #include "png_export.h"
-#include "platform.h"
+#include "libdesktop/platform.h"
+#include "libdesktop/render.h"
+#include "libdesktop/render/software.h"
 
 #include <libfiles/encode.h>
 #include <png.h>
@@ -174,12 +179,35 @@ TEST(SharedPixelSurfaceDrawContextWritesPixels) {
     canvas.Clear(0xFF000000);
 
     {
-        auto draw = pf::create_pixel_surface_context(canvas.Surface());
+        auto draw = render::create_surface_context(canvas.Surface());
         CHECK(draw != nullptr);
-        draw->fill_solid_rect({0, 0, 20, 20}, pf::color_t{255, 255, 255});
+        draw->draw_rect({0, 0, 20, 20}, core::color(core::rgba(255, 255, 255, 255)));
+        (void)draw->render();
     }
 
     CHECK_EQ(canvas.Row(10)[10] & 0x00FFFFFFu, 0x00FFFFFFu);
+}
+
+
+TEST(TextRenderingPreservesTheExistingSurface) {
+    Canvas canvas;
+    CHECK(canvas.Resize(240, 80));
+    canvas.Clear(0xFF112233);
+    const std::uint32_t marker = 0xFFABCDEF;
+    canvas.Row(79)[239] = marker;
+
+    ui::Text(canvas, {4, 4, 90, 36}, L"label", ui::kText, ui::TextAlign::left,
+             ui::Font(1.0));
+    CHECK_EQ(canvas.Row(79)[239], marker);
+
+    Document document;
+    DrawObj object(ShapeKind::Rectangle, {-100, 100, 100, -100}, Style{});
+    object.text = L"label";
+    document.Add(std::move(object));
+
+    Canvas rendered;
+    CHECK(RenderDocumentToCanvas(document, rendered, 100));
+    CHECK_EQ(rendered.Row(0)[0], ArgbFromColor(document.PaperColour()));
 }
 
 TEST(ArgbFromColorPreservesChannels) {
@@ -205,17 +233,17 @@ TEST(AtomicPngWriteReportsSharedWriterFailures) {
     Canvas canvas;
     CHECK(canvas.Resize(2, 2));
     const auto path = TempImage("fast-draw-atomic-failure.png");
-    const pf::atomic_file_test_failure failures[] = {
-        pf::atomic_file_test_failure::open,
-        pf::atomic_file_test_failure::write,
-        pf::atomic_file_test_failure::flush,
-        pf::atomic_file_test_failure::commit,
+    const platform::atomic_file_test_failure failures[] = {
+        platform::atomic_file_test_failure::open,
+        platform::atomic_file_test_failure::write,
+        platform::atomic_file_test_failure::flush,
+        platform::atomic_file_test_failure::commit,
     };
 
     for (const auto failure : failures) {
-        pf::test_set_atomic_file_failure(failure);
+        platform::test_set_atomic_file_failure(failure);
         CHECK_THROWS(WritePng(canvas, path), FileError);
-        pf::test_set_atomic_file_failure(pf::atomic_file_test_failure::none);
+        platform::test_set_atomic_file_failure(platform::atomic_file_test_failure::none);
         std::filesystem::remove(path);
     }
 }

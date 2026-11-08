@@ -1,24 +1,27 @@
-// The application frame.  libdesktop owns the native window, reactor and
-// message dispatch; this class owns fast-draw's document models and the
-// explicit software-raster presentation.
+// The application frame. libdesktop owns the native window, drawn menu and event loop;
+// this class owns fast-draw's document models and explicit software-raster presentation.
 
 #pragma once
 
 #include "canvas.h"
-#include "platform.h"
+#include "libdesktop/ui.h"
+#include "libdesktop/ui/elements.h"
+#include "libdesktop/ui/menu_bar.h"
 #include "shape_palette.h"
 #include "style_panel.h"
 #include "tab_bar.h"
 #include "view.h"
 
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <vector>
 
-class MainWindow final : public pf::frame_reactor,
+class MainWindow final : public ui::app,
+                         public ui::frame_host,
                          public std::enable_shared_from_this<MainWindow> {
 public:
-    MainWindow(pf::window_frame_ptr frame, std::vector<pf::file_path> startupPaths);
+    explicit MainWindow(std::vector<core::file_path> startupPaths = {});
     ~MainWindow() override;
 
     MainWindow(const MainWindow&) = delete;
@@ -26,61 +29,92 @@ public:
 
     View* ActiveView() const;
     View* NewDocument();
-    void OnIdle();
+    void RenderForPaint();
+    core::const_surface_ptr PresentedSurface() const { return surface_.Surface(); }
     bool IsDirty() const { return dirty_; }
 
-    // The main-loop callback calls this after pf::platform_events().
-    void RenderAndPresent();
+    // ui::app lifecycle and keyboard/text routing.
+    bool wants_gpu() const override { return false; }
+    bool key_down(char32_t key, platform::key_state keys) override;
+    bool text_input(std::string_view text) override;
+    ui::focus_mode focus_mode() const override;
+    void track_menu(const ui::frame_ptr& parent, core::recti bounds,
+                    const std::vector<ui::command_ptr>& commands) override;
 
-    // pf::frame_reactor
-    uint32_t handle_message(pf::window_frame_ptr window, pf::message_type message,
-                            const pf::message_params& params) override;
-    uint32_t handle_mouse(pf::window_frame_ptr window, pf::mouse_message_type message,
-                          const pf::mouse_params& params) override;
-    uint32_t handle_keyboard(pf::window_frame_ptr window,
-                             pf::keyboard_message_type message,
-                             const pf::keyboard_params& params) override;
-    void handle_paint(pf::window_frame_ptr& window, pf::draw_context& draw) override;
-    void handle_size(pf::window_frame_ptr& window, pf::isize extent,
-                     pf::measure_context& measure) override;
+    bool parse_command_line(std::string_view) override { return false; }
+    bool load_settings(const platform::setting_file_ptr& store) override;
+    bool init(std::string_view command_line) override;
+    void idle() override {}
+    void frame_tick() override;
+    bool can_exit() override;
+    void exit() override {}
+    void final_exit() override;
+
+    // ui::frame_host paints the menu's sibling content and receives the app-owned canvas input.
+    void on_window_layout(render::measure_context& mc, core::sizei extent,
+                          bool is_minimized) override;
+    void on_window_paint(render::draw_context& dc) override;
+    void visit_elements(const std::function<void(const ui::element_ptr&, core::pointi)>& visit) override;
+    void on_window_destroy() override;
+    void on_mouse_move(core::pointi loc, bool is_tracking) override;
+    void on_mouse_leave(core::pointi loc) override;
+    void on_mouse_left_button_down(core::pointi loc, platform::key_state keys) override;
+    void on_mouse_left_button_up(core::pointi loc, platform::key_state keys) override;
+    void on_mouse_middle_button_up(core::pointi loc, platform::key_state keys) override;
+    void on_mouse_left_button_double_click(core::pointi loc,
+                                           platform::key_state keys) override;
+    void on_mouse_wheel(core::pointi loc, int delta, platform::key_state keys,
+                        bool& was_handled) override;
+    bool key_down(int key, platform::key_state keys) override;
+    std::vector<ui::command_ptr> menu(core::pointi loc) override;
+    void on_mouse_other_button_up(const platform::other_mouse_button& button,
+                                  core::pointi loc, platform::key_state keys) override;
 
 private:
     enum class CaptureTarget { none, view, tabs, palette, style };
 
     void Invalidate();
-    void Layout(pf::isize extent);
+    void Layout(core::sizei extent, double dpiScale);
     void Render();
     void CopySurface(const Canvas& source, Canvas& destination, Point origin);
     void ConfigureControls();
     void InstallMenu();
+    void RefreshCommandState(const std::vector<ui::command_ptr>& commands);
+    void RefreshMenuState();
     void RefreshChrome();
     void ActivateTab(int index);
     void CloseTab(int index);
     void StepTab(int delta);
     void OpenDocument();
     void OnCommand(int id);
-    void OnInitMenu();
     bool OnClose();
     void ShowContextMenu(Point point);
+    std::vector<ui::command_ptr> BuildContextMenu() const;
     std::optional<Color> PickColour(Color initial);
     void ReportDocumentError(std::wstring_view action, const std::filesystem::path& path,
                              std::string_view detail) const;
-    void SetCursor(pf::cursor_shape cursor);
+    void SetCursor(platform::cursor cursor);
+    void SetCapture(bool capture);
+    CaptureTarget Route(core::pointi point) const;
+    Point LocalPoint(CaptureTarget target, core::pointi point) const;
+    void RenderIfDirty();
 
-    pf::window_frame_ptr frame_;
-    std::vector<pf::file_path> startupPaths_;
+    ui::frame_ptr frame_;
+    platform::setting_file_ptr settings_;
+    std::vector<core::file_path> startupPaths_;
     std::vector<std::unique_ptr<View>> views_;
     int activeIndex_ = -1;
     bool sidebarVisible_ = true;
     bool dirty_ = true;
     bool captured_ = false;
-    pf::isize extent_{};
+    core::sizei extent_{};
     double dpiScale_ = 1.0;
+    int menuHeight_ = 0;
 
-    Rect tabBounds_{};
-    Rect paletteBounds_{};
-    Rect styleBounds_{};
-    Rect viewBounds_{};
+    core::recti tabBounds_{};
+    core::recti paletteBounds_{};
+    core::recti styleBounds_{};
+    core::recti viewBounds_{};
 
     Canvas surface_;
     Canvas tabSurface_;
@@ -90,9 +124,12 @@ private:
     ShapePalette palette_;
     StylePanel stylePanel_;
     CaptureTarget captureTarget_ = CaptureTarget::none;
+
+    std::vector<ui::command_ptr> menus_;
+    ui::control_ptr menuBar_;
+    ui::element_ptr surfaceElement_;
 };
 
-// Document actions are kept as small app-level policies around the domain
-// model and libdesktop's file dialogs.
-bool SaveDocument(View& view, bool forceSaveAs, const pf::window_frame_ptr& frame);
-bool PromptToSave(View& view, const pf::window_frame_ptr& frame);
+// Document actions are kept as small app-level policies around platform dialogs.
+bool SaveDocument(View& view, bool forceSaveAs, const ui::frame_ptr& frame);
+bool PromptToSave(View& view, const ui::frame_ptr& frame);

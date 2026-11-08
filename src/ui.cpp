@@ -1,5 +1,7 @@
 #include "ui.h"
 
+#include "libdesktop/core/strings.h"
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -8,15 +10,9 @@
 namespace ui {
 namespace {
 
-std::map<std::tuple<int, bool>, pf::font_handle>& FontCache() {
-    static std::map<std::tuple<int, bool>, pf::font_handle> cache;
+std::map<std::tuple<int, bool>, render::font_face>& FontCache() {
+    static std::map<std::tuple<int, bool>, render::font_face> cache;
     return cache;
-}
-
-pf::color_t ToPfColor(const Color color) {
-    return {static_cast<std::uint8_t>(color >> 16 & 0xffu),
-            static_cast<std::uint8_t>(color >> 8 & 0xffu),
-            static_cast<std::uint8_t>(color & 0xffu)};
 }
 
 }  // namespace
@@ -29,17 +25,17 @@ float ScaleF(const double dpiScale, const float value) {
     return value * static_cast<float>(dpiScale);
 }
 
-pf::font_handle Font(const double dpiScale, const bool bold) {
+render::font_face Font(const double dpiScale, const bool bold) {
     const int dpi = (std::max)(1, static_cast<int>(std::lround(dpiScale * 96.0)));
     const auto key = std::make_tuple(dpi, bold);
     if (const auto found = FontCache().find(key); found != FontCache().end())
         return found->second;
 
-    pf::font_def definition;
-    definition.face = "Segoe UI";
-    definition.size = 9;
+    render::font_desc definition;
+    definition.family = "Segoe UI";
+    definition.size = (std::max)(1, static_cast<int>(std::lround(9.0 * dpiScale)));
     definition.weight = bold ? 600 : 400;
-    const auto handle = pf::create_font_handle(definition);
+    const auto handle = render::make_font(definition);
     FontCache().emplace(key, handle);
     return handle;
 }
@@ -73,23 +69,19 @@ void Line(Renderer& renderer, const Vec2 from, const Vec2 to, const Color colour
 }
 
 void Text(Canvas& canvas, const Rect& bounds, const std::wstring_view text,
-          const Color colour, const TextAlign align, const pf::font_handle font) {
-    if (text.empty() || !font) return;
+          const Color colour, const TextAlign align, const render::font_face font) {
+    if (text.empty() || !canvas.IsValid()) return;
 
-    auto draw = pf::create_pixel_surface_context(canvas.Surface());
+    auto draw = render::create_surface_context(canvas.Surface());
     if (!draw) return;
-    const std::string utf8 = pf::utf16_to_utf8(text);
-    const pf::isize measured = draw->measure_text_h(utf8, font);
-    int x = bounds.left;
-    if (align == TextAlign::center)
-        x += (bounds.Width() - measured.cx) / 2;
-    else if (align == TextAlign::right)
-        x = bounds.right - measured.cx;
-
-    const int y = bounds.top + (bounds.Height() - measured.cy) / 2;
-    draw->set_clip_rect({bounds.left, bounds.top, bounds.right, bounds.bottom});
-    draw->draw_text_h(x, y, utf8, font, ToPfColor(colour));
-    draw->clear_clip_rect();
+    const std::string utf8 = core::utf16_to_utf8(text);
+    const auto style = align == TextAlign::center
+                           ? render::text_style::single_line_center
+                           : align == TextAlign::right ? render::text_style::single_line_far
+                                                       : render::text_style::single_line;
+    draw->draw_text(utf8, core::recti{bounds.left, bounds.top, bounds.right, bounds.bottom},
+                    font, style, ToCoreColor(colour), {});
+    (void)draw->render();
 }
 
 void Swatch(Renderer& renderer, const RectF& bounds, const Color colour, const bool empty,

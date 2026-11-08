@@ -1,12 +1,11 @@
-// Shared chrome: DPI helpers and the explicit software-raster backend used by
-// fast-draw's document and controls.  Window creation, input and presentation
-// belong to libdesktop's pf::window_frame; this file only owns pixels and
-// drawing primitives.
+// Shared chrome and text helpers for fast-draw's app-owned software surfaces.
+// Window creation, input and presentation belong to libdesktop's ui and platform layers.
 
 #pragma once
 
 #include "canvas.h"
-#include "platform.h"
+#include "libdesktop/render.h"
+#include "libdesktop/render/software.h"
 #include "render.h"
 
 #include <cstdint>
@@ -33,8 +32,13 @@ inline constexpr Color kWorkspace = Rgb(0x7A, 0x7C, 0x86);
 int Scale(double dpiScale, int value);
 float ScaleF(double dpiScale, float value);
 
-// Cached shared-platform font handle; owned by the process.
-pf::font_handle Font(double dpiScale, bool bold = false);
+// A process-wide descriptor cache keeps the software controls and labels on one font face.
+render::font_face Font(double dpiScale, bool bold = false);
+
+inline core::color ToCoreColor(const Color colour, const std::uint8_t alpha = 255) {
+    return core::color(core::rgba((colour >> 16) & 0xffu, (colour >> 8) & 0xffu,
+                                  colour & 0xffu, alpha));
+}
 
 inline std::uint32_t Argb(const Color colour, const std::uint8_t alpha = 255) {
     return ArgbFromColor(colour, alpha);
@@ -48,9 +52,9 @@ void Line(Renderer& renderer, Vec2 from, Vec2 to, Color colour, float width);
 
 enum class TextAlign { left, center, right };
 
-// Shared platform text primitive; no app-owned native text/font cache.
+// Shared text primitive: render's measure and draw context replaces the old GDI handle path.
 void Text(Canvas& canvas, const Rect& bounds, std::wstring_view text, Color colour,
-          TextAlign align, pf::font_handle font);
+          TextAlign align, render::font_face font);
 
 // A checkerboard-free colour swatch with a border, used all over the sidebar.
 void Swatch(Renderer& renderer, const RectF& bounds, Color colour, bool empty, bool hot,

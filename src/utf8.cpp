@@ -1,15 +1,15 @@
 #include "utf8.h"
 
-#include "platform.h"
+#include "libdesktop/core.h"
 
 #include <algorithm>
 
 std::string Utf8Encode(std::wstring_view text) {
-    return pf::utf16_to_utf8(text);
+    return core::utf16_to_utf8(text);
 }
 
 std::wstring Utf8Decode(std::string_view text) {
-    return pf::utf8_to_utf16(text);
+    return core::utf8_to_utf16(text);
 }
 
 namespace {

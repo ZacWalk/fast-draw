@@ -1,12 +1,8 @@
 // Portable value types used by the document and software renderer.
 //
-// The platform boundary uses the same coordinate convention (`pf::ipoint`,
-// `pf::isize`, `pf::irect`), but these app-owned types deliberately do not
-// expose a Windows SDK structure in public headers.
+// These app-owned types keep the document model independent of the window layer.
 
 #pragma once
-
-#include "platform.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -29,9 +25,6 @@ struct Size {
 
     constexpr Size() = default;
     constexpr Size(const std::int32_t width, const std::int32_t height) : cx(width), cy(height) {}
-    constexpr Size(const pf::isize value) : cx(value.cx), cy(value.cy) {}
-
-    constexpr operator pf::isize() const { return {cx, cy}; }
     friend constexpr bool operator==(const Size&, const Size&) = default;
 };
 
@@ -41,9 +34,6 @@ struct Point {
 
     constexpr Point() = default;
     constexpr Point(const std::int32_t x_, const std::int32_t y_) : x(x_), y(y_) {}
-    constexpr Point(const pf::ipoint value) : x(value.x), y(value.y) {}
-
-    constexpr operator pf::ipoint() const { return {x, y}; }
     friend constexpr bool operator==(const Point&, const Point&) = default;
 
     constexpr Point operator+(const Size& size) const { return {x + size.cx, y + size.cy}; }

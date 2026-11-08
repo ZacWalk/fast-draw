@@ -1,6 +1,9 @@
 #include "view.h"
 
 #include "file_io.h"
+#include "libdesktop/core/strings.h"
+#include "libdesktop/render.h"
+#include "libdesktop/render/software.h"
 #include "png_export.h"
 #include "resource.h"
 #include "utf8.h"
@@ -86,7 +89,7 @@ bool RenderDocumentToCanvas(const Document& document, Canvas& canvas, int dpi) {
 
 // ------------------------------------------------------ creation / layout
 
-View::View(std::unique_ptr<Document> document, pf::window_frame_ptr frame)
+View::View(std::unique_ptr<Document> document, ui::frame_ptr frame)
     : frame_(std::move(frame)), document_(std::move(document)) {}
 
 View::~View() = default;
@@ -369,19 +372,16 @@ void View::DrawCaret(Renderer& renderer, Canvas& canvas,
     const DrawObj* object = Find(editing_);
     if (!object) return;
 
-    const pf::font_handle font = CreateStyleFont(object->style, transform.scale);
-    if (!font) return;
+    const render::font_face font = CreateStyleFont(object->style, transform.scale);
 
-    auto context = pf::create_pixel_surface_context(canvas.Surface());
-    if (!context) {
-        pf::delete_font_handle(font);
-        return;
-    }
-    const auto full = context->measure_text_h(pf::utf16_to_utf8(object->text), font);
-    const auto prefix = context->measure_text_h(
-        pf::utf16_to_utf8(object->text.substr(0, caret_)), font);
-    const int lineHeight = pf::line_height_for_font(font);
-    pf::delete_font_handle(font);
+    auto context = render::create_surface_context(canvas.Surface());
+    if (!context) return;
+    const auto full = context->measure_text(core::utf16_to_utf8(object->text), font,
+                                            render::text_style::single_line, 100000);
+    const auto prefix = context->measure_text(
+        core::utf16_to_utf8(object->text.substr(0, caret_)), font,
+        render::text_style::single_line, 100000);
+    const int lineHeight = context->text_line_height(font);
 
     const Rect label = LabelRect(*object, transform);
     const float centreX = (label.left + label.right) * 0.5f;
@@ -558,30 +558,26 @@ void View::Copy() {
     }
 
     const std::string text = ObjectsToJson(clones).Dump();
-    if (frame_) frame_->text_to_clipboard(text);
+    platform::set_clipboard(text);
 }
 
 bool View::ClipboardHasObjects() const {
-    if (!frame_) return false;
-    const std::string text = frame_->text_from_clipboard();
-    if (text.empty()) return false;
+    const auto text = platform::clipboard_text();
+    if (!text || text->empty()) return false;
     try {
-        return Json::Parse(text).IsArray();
-    } catch (const FileError&) {
-        return false;
-    } catch (const std::bad_alloc&) {
+        return Json::Parse(*text).IsArray();
+    } catch (const std::exception&) {
         return false;
     }
 }
 
 void View::Paste() {
-    if (!frame_) return;
-    const std::string text = frame_->text_from_clipboard();
-    if (text.empty()) return;
+    const auto text = platform::clipboard_text();
+    if (!text || text->empty()) return;
 
     Document::ObjectList pasted;
     try {
-        pasted = ObjectsFromJson(Json::Parse(text));
+        pasted = ObjectsFromJson(Json::Parse(*text));
     } catch (const std::exception&) {
         return;
     }
@@ -735,7 +731,7 @@ void View::OnLeftDown(const Point point, const bool shift, const bool control, c
     if (onCapture) onCapture(true);
 }
 
-void View::SetCursor(const pf::cursor_shape cursor) const {
+void View::SetCursor(const platform::cursor cursor) const {
     if (onCursor) onCursor(cursor);
 }
 
@@ -746,29 +742,29 @@ void View::OnMouseMove(const Point point, const bool shift, const bool control, 
     const Point local = ToDoc(point);
 
     if (drag_ == Drag::None) {
-        pf::cursor_shape cursor = pf::cursor_shape::arrow;
+        platform::cursor cursor = platform::cursor::normal;
         if (tool_.kind == Tool::Kind::Text) {
-            cursor = pf::cursor_shape::ibeam;
+            cursor = platform::cursor::text_select;
         } else if (tool_.kind == Tool::Kind::Shape) {
-            cursor = pf::cursor_shape::hand;
+            cursor = platform::cursor::link;
         } else {
             const DrawObj* primary = selection_.size() == 1 ? Primary() : nullptr;
             const int handle = primary ? HandleAt(*primary, local) : -1;
             if (handle >= 0) {
                 cursor = (handle == 1 || handle == 5)
-                              ? pf::cursor_shape::size_ns
+                              ? platform::cursor::up_down
                               : (handle == 3 || handle == 7)
-                                    ? pf::cursor_shape::size_we
-                                    : pf::cursor_shape::hand;
+                                    ? platform::cursor::left_right
+                                    : platform::cursor::link;
             } else if (IsSelected(document_->ObjectAt(local, HitTolerance()))) {
-                cursor = pf::cursor_shape::hand;
+                cursor = platform::cursor::link;
             }
         }
 
         const ZoomBadge badge = BadgeLayout();
         if (point.x >= badge.bounds.left && point.x < badge.bounds.right &&
             point.y >= badge.bounds.top && point.y < badge.bounds.bottom)
-            cursor = pf::cursor_shape::hand;
+            cursor = platform::cursor::link;
 
         SetCursor(cursor);
         return;
@@ -782,7 +778,7 @@ void View::OnMouseMove(const Point point, const bool shift, const bool control, 
             break;
 
         case Drag::Move: {
-            SetCursor(pf::cursor_shape::hand);
+            SetCursor(platform::cursor::link);
 
             const DrawObj* primary = Primary();
             if (!primary) break;
@@ -805,10 +801,10 @@ void View::OnMouseMove(const Point point, const bool shift, const bool control, 
             if (!primary) break;
 
             SetCursor((dragHandle_ == 1 || dragHandle_ == 5)
-                          ? pf::cursor_shape::size_ns
+                          ? platform::cursor::up_down
                           : (dragHandle_ == 3 || dragHandle_ == 7)
-                                ? pf::cursor_shape::size_we
-                                : pf::cursor_shape::hand);
+                                ? platform::cursor::left_right
+                                : platform::cursor::link);
 
             Point target = Snap(local);
             // Shift keeps a shape square, pivoting on the opposite corner.
@@ -828,9 +824,11 @@ std::size_t View::CaretIndexAt(const Point clientPoint) const {
     if (!object || object->text.empty()) return 0;
 
     const Transform transform = GetTransform();
-    const pf::font_handle font = CreateStyleFont(object->style, transform.scale);
-    if (!font) return object->text.size();
-    const auto full = pf::measure_text_with_font(font, pf::utf16_to_utf8(object->text));
+    const render::font_face font = CreateStyleFont(object->style, transform.scale);
+    auto context = render::create_surface_context(std::make_shared<core::surface>());
+    if (!context) return object->text.size();
+    const auto full = context->measure_text(core::utf16_to_utf8(object->text), font,
+                                            render::text_style::single_line, 100000);
 
     const Rect label = LabelRect(*object, transform);
     const int origin = (label.left + label.right) / 2 - full.cx / 2;
@@ -839,8 +837,9 @@ std::size_t View::CaretIndexAt(const Point clientPoint) const {
     int bestDistance = std::abs(clientPoint.x - origin);
     for (std::size_t i = 1; i <= object->text.size(); ++i) {
         if (!IsCaretStop(object->text, i)) continue;
-        const auto prefix = pf::measure_text_with_font(
-            font, pf::utf16_to_utf8(object->text.substr(0, i)));
+        const auto prefix = context->measure_text(
+            core::utf16_to_utf8(object->text.substr(0, i)), font,
+            render::text_style::single_line, 100000);
         const int distance = std::abs(clientPoint.x - (origin + prefix.cx));
         if (distance < bestDistance) {
             bestDistance = distance;
@@ -848,7 +847,6 @@ std::size_t View::CaretIndexAt(const Point clientPoint) const {
         }
     }
 
-    pf::delete_font_handle(font);
     return best;
 }
 
@@ -941,14 +939,14 @@ void View::BeginEditing(ObjectId id) {
     editing_ = id;
     caret_ = Find(id)->text.size();
     caretVisible_ = true;
-    if (frame_) frame_->set_timer(kCaretTimer, 500);
+    
     Invalidate();
 }
 
 void View::EndEditing() {
     if (editing_ == ObjectId::None) return;
 
-    if (frame_) frame_->kill_timer(kCaretTimer);
+    
     editing_ = ObjectId::None;
 
     if (textChange_) {
@@ -992,37 +990,57 @@ void View::OnChar(const char32_t character) {
     Invalidate();
 }
 
-void View::OnKeyDown(const unsigned int key, const bool shift) {
+bool View::OnKeyDown(const char32_t key, const bool shift) {
     if (DrawObj* object = Find(editing_)) {
-        switch (key) {
-            case pf::platform_key::Escape: EndEditing(); return;
-            case pf::platform_key::Left: caret_ = PreviousCaretStop(object->text, caret_); break;
-            case pf::platform_key::Right: caret_ = NextCaretStop(object->text, caret_); break;
-            case pf::platform_key::Home: caret_ = 0; break;
-            case pf::platform_key::End: caret_ = object->text.size(); break;
-            case pf::platform_key::Delete:
-                if (caret_ < object->text.size())
-                    object->text.erase(caret_, NextCaretStop(object->text, caret_) - caret_);
-                break;
-            default: return;
+        if (key == platform::keys::ESCAPE) {
+            EndEditing();
+            return true;
+        }
+        if (key == platform::keys::LEFT)
+            caret_ = PreviousCaretStop(object->text, caret_);
+        else if (key == platform::keys::RIGHT)
+            caret_ = NextCaretStop(object->text, caret_);
+        else if (key == platform::keys::HOME)
+            caret_ = 0;
+        else if (key == platform::keys::END)
+            caret_ = object->text.size();
+        else if (key == platform::keys::DEL) {
+            if (caret_ < object->text.size())
+                object->text.erase(caret_, NextCaretStop(object->text, caret_) - caret_);
+        } else {
+            return false;
         }
         caretVisible_ = true;
         Invalidate();
-        return;
+        return true;
     }
 
     const long step = shift ? 1 : kMinorGrid;
-    switch (key) {
-        case pf::platform_key::Escape: OnCommand(ID_CANCEL); break;
-        case pf::platform_key::Left: NudgeSelection(-step, 0); break;
-        case pf::platform_key::Right: NudgeSelection(step, 0); break;
-        case pf::platform_key::Up: NudgeSelection(0, step); break;
-        case pf::platform_key::Down: NudgeSelection(0, -step); break;
-        case pf::platform_key::F2:
-            if (selection_.size() == 1) BeginEditing(selection_.front());
-            break;
-        default: break;
+    if (key == platform::keys::ESCAPE) {
+        OnCommand(ID_CANCEL);
+        return true;
     }
+    if (key == platform::keys::LEFT) {
+        NudgeSelection(-step, 0);
+        return true;
+    }
+    if (key == platform::keys::RIGHT) {
+        NudgeSelection(step, 0);
+        return true;
+    }
+    if (key == platform::keys::UP) {
+        NudgeSelection(0, step);
+        return true;
+    }
+    if (key == platform::keys::DOWN) {
+        NudgeSelection(0, -step);
+        return true;
+    }
+    if (key == platform::keys::F2 && selection_.size() == 1) {
+        BeginEditing(selection_.front());
+        return true;
+    }
+    return false;
 }
 
 void View::OnContextMenu(const Point point) {
@@ -1045,7 +1063,7 @@ bool View::OnCommand(int id) {
     // While a label is being typed the edit commands belong to the text.
     if (editing_ != ObjectId::None) {
         switch (id) {
-            case ID_EDIT_CLEAR: OnKeyDown(pf::platform_key::Delete, false); return true;
+            case ID_EDIT_CLEAR: OnKeyDown(platform::keys::DEL, false); return true;
             case ID_EDIT_CUT:
             case ID_EDIT_PASTE:
             case ID_EDIT_DUPLICATE:

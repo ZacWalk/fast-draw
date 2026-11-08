@@ -2,7 +2,6 @@
 
 #include "canvas.h"
 #include "file_io.h"
-#include "platform.h"
 
 #include <libfiles/encode.h>
 
@@ -12,12 +11,11 @@
 void WritePng(const Canvas& canvas, const std::filesystem::path& path) {
     if (!canvas.IsValid()) throw FileError("there is nothing to save");
 
-    // Canvas stores 0xAARRGGBB values. On Windows' little-endian machines the
-    // byte view is exactly libfiles' straight-alpha BGRA8 contract:
-    // blue, green, red, alpha. Do not swap the channels here.
+    // Canvas is a top-down straight-alpha BGRA8 core::surface, which is the
+    // shared libfiles encoder contract on Windows.
     libfiles::image_view image;
     image.pixels = reinterpret_cast<const std::uint8_t*>(canvas.Pixels());
-    image.stride = static_cast<std::size_t>(canvas.Width()) * sizeof(std::uint32_t);
+    image.stride = canvas.Surface()->stride();
     image.width = static_cast<std::uint32_t>(canvas.Width());
     image.height = static_cast<std::uint32_t>(canvas.Height());
     image.format = libfiles::pixel_format::bgra8;
@@ -32,7 +30,6 @@ void WritePng(const Canvas& canvas, const std::filesystem::path& path) {
     }
 
     if (encoded.data.empty()) throw FileError("PNG encoder returned no data");
-    for (const auto& note : encoded.notes)
-        pf::debug_trace("fast-draw PNG encoder: " + note + "\n");
+    for (const auto& note : encoded.notes) core::trace("fast-draw PNG encoder: " + note);
     WriteFileBytes(path, encoded.data);
 }

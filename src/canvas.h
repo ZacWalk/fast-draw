@@ -1,8 +1,9 @@
-// A 32-bit BGRA8 pixel surface owned by the shared desktop layer.
+// A 32-bit BGRA8 pixel surface owned by libdesktop's core layer.
 
 #pragma once
 
 #include "geometry.h"
+#include "libdesktop/core.h"
 
 #include <cstdint>
 
@@ -19,27 +20,33 @@ public:
 
     bool Resize(int width, int height);
 
-    bool IsValid() const { return surface_.width > 0 && surface_.height > 0; }
-    int Width() const { return surface_.width; }
-    int Height() const { return surface_.height; }
-    Size GetSize() const { return Size(surface_.width, surface_.height); }
+    bool IsValid() const { return surface_ && !surface_->empty(); }
+    int Width() const { return surface_ ? static_cast<int>(surface_->width()) : 0; }
+    int Height() const { return surface_ ? static_cast<int>(surface_->height()) : 0; }
+    Size GetSize() const { return Size(Width(), Height()); }
 
-    std::uint32_t* Pixels() { return surface_.pixels.data(); }
-    const std::uint32_t* Pixels() const { return surface_.pixels.data(); }
-    std::uint32_t* Row(int y) { return surface_.pixels.data() + static_cast<std::ptrdiff_t>(y) * Width(); }
+    std::uint32_t* Pixels() {
+        return surface_ ? reinterpret_cast<std::uint32_t*>(surface_->pixels()) : nullptr;
+    }
+    const std::uint32_t* Pixels() const {
+        return surface_ ? reinterpret_cast<const std::uint32_t*>(surface_->pixels()) : nullptr;
+    }
+    std::uint32_t* Row(int y) {
+        return surface_ ? reinterpret_cast<std::uint32_t*>(surface_->pixels_line(y)) : nullptr;
+    }
     const std::uint32_t* Row(int y) const {
-        return surface_.pixels.data() + static_cast<std::ptrdiff_t>(y) * Width();
+        return surface_ ? reinterpret_cast<const std::uint32_t*>(surface_->pixels_line(y)) : nullptr;
     }
 
-    pf::pixel_surface& Surface() { return surface_; }
-    const pf::pixel_surface& Surface() const { return surface_; }
+    core::surface_ptr Surface() { return surface_; }
+    core::const_surface_ptr Surface() const { return surface_; }
 
     // `colour` is 0xAARRGGBB; the surface bytes are BGRA8.
     void Clear(std::uint32_t colour);
     void SetOpaque();
 
 private:
-    pf::pixel_surface surface_;
+    core::surface_ptr surface_;
 };
 
 inline std::uint32_t ArgbFromColor(Color colour, std::uint8_t alpha = 255) {

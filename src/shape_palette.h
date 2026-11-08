@@ -1,5 +1,5 @@
 // The hand-drawn shape palette.  It is an app-owned control model; the
-// libdesktop reactor supplies the containing window and input dispatch.
+// libdesktop UI frame supplies the containing window and input dispatch.
 
 #pragma once
 
