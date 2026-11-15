@@ -7,7 +7,7 @@
 
 #include "geometry.h"
 #include "libdesktop/render.h"
-#include "render.h"
+#include "path.h"
 #include "shapes.h"
 #include "style.h"
 
@@ -16,47 +16,54 @@
 
 // A stable handle to an object. Unlike an address it survives undo replacing
 // the whole object list, and unlike an index it survives reordering.
-enum class ObjectId : std::uint64_t { None = 0 };
+enum class ObjectId : std::uint64_t
+{
+	None = 0
+};
 
-class DrawObj {
+class DrawObj
+{
 public:
-    DrawObj() = default;
-    DrawObj(ShapeKind shape, const Rect& bounds, const Style& objectStyle)
-        : kind(shape), position(bounds), style(objectStyle) {}
+	DrawObj() = default;
+	DrawObj(ShapeKind shape, const Rect& bounds, const Style& objectStyle) :
+		kind(shape), position(bounds), style(objectStyle)
+	{
+	}
 
-    Json ToJson() const;
-    static DrawObj FromJson(const Json& json);
+	Json ToJson() const;
+	static DrawObj FromJson(const Json& json);
 
-    // The outline in device pixels. Linear shapes stay open.
-    void BuildPath(const Transform& transform, Path& out) const;
+	// The outline in device pixels. Linear shapes stay open.
+	void BuildPath(const Transform& transform, Path& out) const;
 
-    void Draw(Renderer& renderer, const Transform& transform) const;
-    // Text uses libdesktop's shared draw context; call this after the shapes
-    // have been filled.
-    // `fit` trims an overlong label with an ellipsis. A label that is being typed
-    // is drawn in full instead, so the caret always sits beside visible text.
-    void DrawLabel(Canvas& canvas, const Transform& transform, bool fit = true) const;
+	// Each closed contour is a polygon, filled and bordered as the style says;
+	// open contours are lines, and arrow heads filled polygons.
+	void Draw(render::draw_context& dc, const Transform& transform) const;
+	// Call this after the shapes have been drawn.
+	// `fit` trims an overlong label with an ellipsis. A label that is being typed
+	// is drawn in full instead, so the caret always sits beside visible text.
+	void DrawLabel(render::draw_context& dc, const Transform& transform, bool fit = true) const;
 
-    // Document bounds including the stroke width and any arrow heads.
-    Rect Bounds() const;
+	// Document bounds including the stroke width and any arrow heads.
+	Rect Bounds() const;
 
-    bool HitTest(Point docPoint, long tolerance) const;
-    bool IsWithin(const Rect& docRect) const;
+	bool HitTest(Point docPoint, long tolerance) const;
+	bool IsWithin(const Rect& docRect) const;
 
-    int HandleCount() const;
-    Point Handle(int index) const;
-    void MoveHandle(int index, Point docPoint);
-    void Offset(Size delta);
+	int HandleCount() const;
+	Point Handle(int index) const;
+	void MoveHandle(int index, Point docPoint);
+	void Offset(Size delta);
 
-    ShapeKind kind = ShapeKind::Rectangle;
-    Rect position;
-    Style style;
-    std::wstring text;
+	ShapeKind kind = ShapeKind::Rectangle;
+	Rect position;
+	Style style;
+	std::wstring text;
 
-    // Assigned by the document; not serialized, so a pasted copy is a new object.
-    ObjectId id = ObjectId::None;
+	// Assigned by the document; not serialized, so a pasted copy is a new object.
+	ObjectId id = ObjectId::None;
 
-    friend bool operator==(const DrawObj&, const DrawObj&) = default;
+	friend bool operator==(const DrawObj&, const DrawObj&) = default;
 };
 
 // The label font at a given document-to-device scale. The caller owns it.

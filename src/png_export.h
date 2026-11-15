@@ -1,8 +1,8 @@
 #pragma once
 
+#include "libdesktop/core.h"
+
 #include <filesystem>
 
-class Canvas;
-
-// Writes the canvas as an 8-bit RGBA PNG. Throws FileError on failure.
-void WritePng(const Canvas& canvas, const std::filesystem::path& path);
+// Writes a top-down BGRA surface as an 8-bit RGBA PNG. Throws FileError on failure.
+void WritePng(const core::const_surface_ptr& surface, const std::filesystem::path& path);

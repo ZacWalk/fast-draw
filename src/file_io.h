@@ -7,9 +7,10 @@
 #include <string>
 #include <string_view>
 
-class FileError : public std::runtime_error {
+class FileError : public std::runtime_error
+{
 public:
-    using std::runtime_error::runtime_error;
+	using std::runtime_error::runtime_error;
 };
 
 // Reads and atomic writes delegate to libdesktop's shared file handles. Both

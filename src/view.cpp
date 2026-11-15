@@ -14,1237 +14,1362 @@
 #include <cstring>
 #include <new>
 
-namespace {
+namespace
+{
 
-// Gap between the workspace edge and the paper, in device pixels at 96 dpi.
-constexpr int kPageMargin = 28;
+	// Gap between the workspace edge and the paper, in device pixels at 96 dpi.
+	constexpr int kPageMargin = 28;
 
-// Size of an object created by a click rather than a drag, in document units.
-// Both are even multiples of the grid so a click lands on grid lines.
-constexpr long kDefaultWidth = 150;
-constexpr long kDefaultHeight = 100;
+	// Size of an object created by a click rather than a drag, in document units.
+	// Both are even multiples of the grid so a click lands on grid lines.
+	constexpr long kDefaultWidth = 150;
+	constexpr long kDefaultHeight = 100;
 
-constexpr long kMinorGrid = 25;   // 0.25"
-constexpr long kMajorGrid = 100;  // 1"
+	constexpr long kMinorGrid = 25;  // 0.25"
+	constexpr long kMajorGrid = 100; // 1"
 
-constexpr float kMinZoom = 0.1f;
-constexpr float kMaxZoom = 8.0f;
-constexpr float kZoomStep = 1.25f;
+	constexpr float kMinZoom = 0.1f;
+	constexpr float kMaxZoom = 8.0f;
+	constexpr float kZoomStep = 1.25f;
 
-constexpr int kExportDpi = 150;
+	constexpr int kExportDpi = 150;
 
-constexpr unsigned int kCaretTimer = 1;
+	constexpr unsigned int kCaretTimer = 1;
 
-// Page sizes in document units, indexed by ID_PAGE_FIRST..ID_PAGE_LAST.
-constexpr Size kPageSizes[] = {
-    {1100, 850},   // Letter landscape
-    {850, 1100},   // Letter portrait
-    {1169, 827},   // A4 landscape
-    {827, 1169},   // A4 portrait
-    {1654, 1169},  // A3 landscape
-};
+	// Page sizes in document units, indexed by ID_PAGE_FIRST..ID_PAGE_LAST.
+	constexpr Size kPageSizes[] = {
+		{1100, 850},  // Letter landscape
+		{850, 1100},  // Letter portrait
+		{1169, 827},  // A4 landscape
+		{827, 1169},  // A4 portrait
+		{1654, 1169}, // A3 landscape
+	};
 
-static_assert(std::size(kPageSizes) == ID_PAGE_LAST - ID_PAGE_FIRST + 1);
+	static_assert(std::size(kPageSizes) == ID_PAGE_LAST - ID_PAGE_FIRST + 1);
 
-Rect CentredRect(Point centre, long width, long height) {
-    return Rect(centre.x - width / 2, centre.y + height / 2, centre.x + width / 2,
-                centre.y - height / 2);
-}
+	Rect CentredRect(Point centre, long width, long height)
+	{
+		return Rect(centre.x - width / 2, centre.y + height / 2, centre.x + width / 2, centre.y - height / 2);
+	}
 
-long RoundTo(long value, long step) {
-    const long half = value >= 0 ? step / 2 : -step / 2;
-    return (value + half) / step * step;
-}
+	long RoundTo(long value, long step)
+	{
+		const long half = value >= 0 ? step / 2 : -step / 2;
+		return (value + half) / step * step;
+	}
 
-// Axis-aligned extents of an object in document space, y increasing upwards.
-struct Extent {
-    long minX, maxX, minY, maxY;
-};
+	// Axis-aligned extents of an object in document space, y increasing upwards.
+	struct Extent
+	{
+		long minX, maxX, minY, maxY;
+	};
 
-Extent ExtentOf(const Rect& rect) {
-    return Extent{(std::min)(rect.left, rect.right), (std::max)(rect.left, rect.right),
-                  (std::min)(rect.top, rect.bottom), (std::max)(rect.top, rect.bottom)};
-}
+	Extent ExtentOf(const Rect& rect)
+	{
+		return Extent{(std::min)(rect.left, rect.right), (std::max)(rect.left, rect.right),
+		              (std::min)(rect.top, rect.bottom), (std::max)(rect.top, rect.bottom)};
+	}
 
-}  // namespace
+} // namespace
 
-bool RenderDocumentToCanvas(const Document& document, Canvas& canvas, int dpi) {
-    const Size page = document.PageSize();
-    if (!canvas.Resize(static_cast<int>((static_cast<long long>(page.cx) * dpi) / 100),
-                      static_cast<int>((static_cast<long long>(page.cy) * dpi) / 100)))
-        return false;
+core::surface_ptr RenderDocument(const Document& document, const int dpi)
+{
+	const Size page = document.PageSize();
+	const core::sizei extent{static_cast<int>((static_cast<long long>(page.cx) * dpi) / 100),
+	                         static_cast<int>((static_cast<long long>(page.cy) * dpi) / 100)};
+	if (extent.cx < 1 || extent.cy < 1) return {};
 
-    Renderer renderer(canvas);
-    renderer.Clear(ArgbFromColor(document.PaperColour()));
+	auto surface = std::make_shared<core::surface>();
+	const auto dc = render::create_surface_context(surface);
+	if (!dc) return {};
+	dc->begin_draw(extent, render::default_font_size, {});
+	dc->clear(ui::ToCoreColor(document.PaperColour()));
 
-    Transform transform;
-    transform.scale = static_cast<float>(dpi) / 100.0f;
-    transform.offsetX = page.cx * 0.5f * transform.scale;
-    transform.offsetY = page.cy * 0.5f * transform.scale;
+	Transform transform;
+	transform.scale = static_cast<float>(dpi) / 100.0f;
+	transform.offsetX = page.cx * 0.5f * transform.scale;
+	transform.offsetY = page.cy * 0.5f * transform.scale;
 
-    document.Draw(renderer, canvas, transform);
-    canvas.SetOpaque();
-    return true;
+	document.Draw(*dc, transform);
+	if (dc->render().failed || surface->dimensions() != extent) return {};
+	return surface;
 }
 
 // ------------------------------------------------------ creation / layout
 
-View::View(std::unique_ptr<Document> document, ui::frame_ptr frame)
-    : frame_(std::move(frame)), document_(std::move(document)) {}
+View::View(std::unique_ptr<Document> document, ui::frame_ptr frame) :
+	frame_(std::move(frame)), document_(std::move(document))
+{
+}
 
 View::~View() = default;
 
-void View::SetViewport(const Size extent, const double dpiScale) {
-    viewport_ = extent;
-    dpiScale_ = dpiScale;
-    UpdateScrollBars();
+void View::SetViewport(const Size extent, const double dpiScale)
+{
+	viewport_ = extent;
+	dpiScale_ = dpiScale;
+	UpdateScrollBars();
 }
 
 // ------------------------------------------------------------- coordinates
 
-Transform View::GetTransform() const {
-    const Size page = document_->PageSize();
-    const float margin = ui::ScaleF(dpiScale_, static_cast<float>(kPageMargin));
+Transform View::GetTransform() const
+{
+	const Size page = document_->PageSize();
+	const float margin = ui::ScaleF(dpiScale_, static_cast<float>(kPageMargin));
 
-    Transform transform;
-    transform.scale = static_cast<float>(dpiScale_ * 96.0 / 100.0) * zoom_;
-    transform.offsetX = margin - scroll_.x + page.cx * 0.5f * transform.scale;
-    transform.offsetY = margin - scroll_.y + page.cy * 0.5f * transform.scale;
-    return transform;
+	Transform transform;
+	transform.scale = static_cast<float>(dpiScale_ * 96.0 / 100.0) * zoom_;
+	transform.offsetX = margin - scroll_.x + page.cx * 0.5f * transform.scale;
+	transform.offsetY = margin - scroll_.y + page.cy * 0.5f * transform.scale;
+	return transform;
 }
 
-Point View::ToDoc(const Point clientPoint) const {
-    return GetTransform().ToDoc(
-        Vec2{static_cast<float>(clientPoint.x), static_cast<float>(clientPoint.y)});
+Point View::ToDoc(const Point clientPoint) const
+{
+	return GetTransform().ToDoc(Vec2{static_cast<float>(clientPoint.x), static_cast<float>(clientPoint.y)});
 }
 
-long View::HitTolerance() const {
-    return (std::max)(3L, static_cast<long>(ui::ScaleF(dpiScale_, 5.0f) / GetTransform().scale));
+long View::HitTolerance() const
+{
+	return (std::max)(3L, static_cast<long>(ui::ScaleF(dpiScale_, 5.0f) / GetTransform().scale));
 }
 
-Point View::Snap(Point docPoint) const {
-    if (!snap_ || altHeld_) return docPoint;
-    return Point(RoundTo(docPoint.x, kMinorGrid), RoundTo(docPoint.y, kMinorGrid));
+Point View::Snap(Point docPoint) const
+{
+	if (!snap_ || altHeld_) return docPoint;
+	return Point(RoundTo(docPoint.x, kMinorGrid), RoundTo(docPoint.y, kMinorGrid));
 }
 
-int View::HandleAt(const DrawObj& object, Point docPoint) const {
-    const long reach = static_cast<long>(ui::ScaleF(dpiScale_, 6.0f) / GetTransform().scale);
-    for (int i = 0; i < object.HandleCount(); ++i) {
-        const Point handle = object.Handle(i);
-        if (std::labs(handle.x - docPoint.x) <= reach && std::labs(handle.y - docPoint.y) <= reach)
-            return i;
-    }
-    return -1;
+int View::HandleAt(const DrawObj& object, Point docPoint) const
+{
+	const long reach = static_cast<long>(ui::ScaleF(dpiScale_, 6.0f) / GetTransform().scale);
+	for (int i = 0; i < object.HandleCount(); ++i)
+	{
+		const Point handle = object.Handle(i);
+		if (std::labs(handle.x - docPoint.x) <= reach && std::labs(handle.y - docPoint.y) <= reach) return i;
+	}
+	return -1;
 }
 
 // --------------------------------------------------------------- selection
 
-DrawObj* View::Find(ObjectId id) const { return document_->Find(id); }
-
-DrawObj* View::Primary() const { return selection_.empty() ? nullptr : Find(selection_.front()); }
-
-bool View::IsSelected(ObjectId id) const {
-    return std::find(selection_.begin(), selection_.end(), id) != selection_.end();
+DrawObj* View::Find(ObjectId id) const
+{
+	return document_->Find(id);
 }
 
-void View::AddToSelection(ObjectId id) {
-    if (id != ObjectId::None && !IsSelected(id)) selection_.push_back(id);
+DrawObj* View::Primary() const
+{
+	return selection_.empty() ? nullptr : Find(selection_.front());
 }
 
-void View::Select(ObjectId id, bool add) {
-    if (!add) selection_.clear();
-    AddToSelection(id);
-    Invalidate();
-    Changed();
+bool View::IsSelected(ObjectId id) const
+{
+	return std::find(selection_.begin(), selection_.end(), id) != selection_.end();
 }
 
-void View::RemoveFromSelection(ObjectId id) {
-    std::erase(selection_, id);
+void View::AddToSelection(ObjectId id)
+{
+	if (id != ObjectId::None && !IsSelected(id)) selection_.push_back(id);
 }
 
-void View::SelectAll() {
-    selection_.clear();
-    for (const DrawObj& object : document_->Objects()) selection_.push_back(object.id);
-    Invalidate();
-    Changed();
+void View::Select(ObjectId id, bool add)
+{
+	if (!add) selection_.clear();
+	AddToSelection(id);
+	Invalidate();
+	Changed();
 }
 
-void View::ClearSelection() {
-    if (selection_.empty()) return;
-    Select(ObjectId::None, false);
+void View::RemoveFromSelection(ObjectId id)
+{
+	std::erase(selection_, id);
 }
 
-void View::DeleteSelection() {
-    if (selection_.empty()) return;
-    EndEditing();
-
-    document_->BeginChange();
-    const std::vector<ObjectId> doomed = selection_;
-    selection_.clear();
-    for (const ObjectId id : doomed) document_->Remove(id);
-    document_->CommitChange();
-
-    Invalidate();
-    Changed();
+void View::SelectAll()
+{
+	selection_.clear();
+	for (const DrawObj& object : document_->Objects()) selection_.push_back(object.id);
+	Invalidate();
+	Changed();
 }
 
-void View::DuplicateSelection() {
-    if (selection_.empty()) return;
-
-    document_->BeginChange();
-    std::vector<ObjectId> copies;
-    copies.reserve(selection_.size());
-    for (const ObjectId id : selection_) {
-        const DrawObj* source = Find(id);
-        if (!source) continue;
-
-        DrawObj copy = *source;
-        copy.Offset(Size(kMinorGrid, -kMinorGrid));
-        copies.push_back(document_->Add(std::move(copy)));
-    }
-    document_->CommitChange();
-
-    selection_ = std::move(copies);
-    Invalidate();
-    Changed();
+void View::ClearSelection()
+{
+	if (selection_.empty()) return;
+	Select(ObjectId::None, false);
 }
 
-void View::NudgeSelection(long dx, long dy) {
-    if (selection_.empty()) return;
+void View::DeleteSelection()
+{
+	if (selection_.empty()) return;
+	EndEditing();
 
-    document_->BeginChange();
-    for (const ObjectId id : selection_) {
-        if (DrawObj* object = Find(id)) object->Offset(Size(dx, dy));
-    }
-    document_->CommitChange();
+	document_->BeginChange();
+	const std::vector<ObjectId> doomed = selection_;
+	selection_.clear();
+	for (const ObjectId id : doomed) document_->Remove(id);
+	document_->CommitChange();
 
-    Invalidate();
-    Changed();
+	Invalidate();
+	Changed();
 }
 
-void View::AlignSelection(int command) {
-    if (selection_.size() < 2) return;
+void View::DuplicateSelection()
+{
+	if (selection_.empty()) return;
 
-    bool any = false;
-    Extent group{};
-    for (const ObjectId id : selection_) {
-        const DrawObj* object = Find(id);
-        if (!object) continue;
+	document_->BeginChange();
+	std::vector<ObjectId> copies;
+	copies.reserve(selection_.size());
+	for (const ObjectId id : selection_)
+	{
+		const DrawObj* source = Find(id);
+		if (!source) continue;
 
-        const Extent each = ExtentOf(object->position);
-        if (!any) {
-            group = each;
-            any = true;
-            continue;
-        }
-        group.minX = (std::min)(group.minX, each.minX);
-        group.maxX = (std::max)(group.maxX, each.maxX);
-        group.minY = (std::min)(group.minY, each.minY);
-        group.maxY = (std::max)(group.maxY, each.maxY);
-    }
-    if (!any) return;
+		DrawObj copy = *source;
+		copy.Offset(Size(kMinorGrid, -kMinorGrid));
+		copies.push_back(document_->Add(std::move(copy)));
+	}
+	document_->CommitChange();
 
-    document_->BeginChange();
-    for (const ObjectId id : selection_) {
-        DrawObj* object = Find(id);
-        if (!object) continue;
-
-        const Extent each = ExtentOf(object->position);
-        long dx = 0;
-        long dy = 0;
-
-        switch (command) {
-            case ID_OBJECT_ALIGN_LEFT: dx = group.minX - each.minX; break;
-            case ID_OBJECT_ALIGN_RIGHT: dx = group.maxX - each.maxX; break;
-            case ID_OBJECT_ALIGN_CENTRE:
-                dx = (group.minX + group.maxX) / 2 - (each.minX + each.maxX) / 2;
-                break;
-            case ID_OBJECT_ALIGN_TOP: dy = group.maxY - each.maxY; break;
-            case ID_OBJECT_ALIGN_BOTTOM: dy = group.minY - each.minY; break;
-            case ID_OBJECT_ALIGN_MIDDLE:
-                dy = (group.minY + group.maxY) / 2 - (each.minY + each.maxY) / 2;
-                break;
-            default: break;
-        }
-
-        object->Offset(Size(dx, dy));
-    }
-    document_->CommitChange();
-
-    Invalidate();
-    Changed();
+	selection_ = std::move(copies);
+	Invalidate();
+	Changed();
 }
 
-Style View::EffectiveStyle() const {
-    if (const DrawObj* object = Primary()) return object->style;
-    return style_;
+void View::NudgeSelection(long dx, long dy)
+{
+	if (selection_.empty()) return;
+
+	document_->BeginChange();
+	for (const ObjectId id : selection_)
+	{
+		if (DrawObj* object = Find(id)) object->Offset(Size(dx, dy));
+	}
+	document_->CommitChange();
+
+	Invalidate();
+	Changed();
 }
 
-void View::ApplyStyle(const Style& style) {
-    // Only the fields the sidebar actually changed are pushed onto the
-    // selection, so a mixed selection keeps the rest of its own styling. The
-    // defaults for new objects take the same change and nothing else: the
-    // panel is showing a selected object's style, and copying all of it would
-    // hand, say, a text label's missing fill and outline to the next shape.
-    const Style previous = EffectiveStyle();
-    ApplyStyleDelta(previous, style, style_);
+void View::AlignSelection(int command)
+{
+	if (selection_.size() < 2) return;
 
-    if (!selection_.empty()) {
-        document_->BeginChange();
-        for (const ObjectId id : selection_) {
-            if (DrawObj* object = Find(id)) ApplyStyleDelta(previous, style, object->style);
-        }
-        document_->CommitChange();
-    }
+	bool any = false;
+	Extent group{};
+	for (const ObjectId id : selection_)
+	{
+		const DrawObj* object = Find(id);
+		if (!object) continue;
 
-    Invalidate();
-    Changed();
+		const Extent each = ExtentOf(object->position);
+		if (!any)
+		{
+			group = each;
+			any = true;
+			continue;
+		}
+		group.minX = (std::min)(group.minX, each.minX);
+		group.maxX = (std::max)(group.maxX, each.maxX);
+		group.minY = (std::min)(group.minY, each.minY);
+		group.maxY = (std::max)(group.maxY, each.maxY);
+	}
+	if (!any) return;
+
+	document_->BeginChange();
+	for (const ObjectId id : selection_)
+	{
+		DrawObj* object = Find(id);
+		if (!object) continue;
+
+		const Extent each = ExtentOf(object->position);
+		long dx = 0;
+		long dy = 0;
+
+		switch (command)
+		{
+		case ID_OBJECT_ALIGN_LEFT: dx = group.minX - each.minX; break;
+		case ID_OBJECT_ALIGN_RIGHT: dx = group.maxX - each.maxX; break;
+		case ID_OBJECT_ALIGN_CENTRE: dx = (group.minX + group.maxX) / 2 - (each.minX + each.maxX) / 2; break;
+		case ID_OBJECT_ALIGN_TOP: dy = group.maxY - each.maxY; break;
+		case ID_OBJECT_ALIGN_BOTTOM: dy = group.minY - each.minY; break;
+		case ID_OBJECT_ALIGN_MIDDLE: dy = (group.minY + group.maxY) / 2 - (each.minY + each.maxY) / 2; break;
+		default: break;
+		}
+
+		object->Offset(Size(dx, dy));
+	}
+	document_->CommitChange();
+
+	Invalidate();
+	Changed();
 }
 
-void View::SetTool(Tool tool) {
-    if (tool_ == tool) return;
-    tool_ = tool;
-    if (tool.kind != Tool::Kind::Select) EndEditing();
+Style View::EffectiveStyle() const
+{
+	if (const DrawObj* object = Primary()) return object->style;
+	return style_;
+}
+
+void View::ApplyStyle(const Style& style)
+{
+	// Only the fields the sidebar actually changed are pushed onto the
+	// selection, so a mixed selection keeps the rest of its own styling. The
+	// defaults for new objects take the same change and nothing else: the
+	// panel is showing a selected object's style, and copying all of it would
+	// hand, say, a text label's missing fill and outline to the next shape.
+	const Style previous = EffectiveStyle();
+	ApplyStyleDelta(previous, style, style_);
+
+	if (!selection_.empty())
+	{
+		document_->BeginChange();
+		for (const ObjectId id : selection_)
+		{
+			if (DrawObj* object = Find(id)) ApplyStyleDelta(previous, style, object->style);
+		}
+		document_->CommitChange();
+	}
+
+	Invalidate();
+	Changed();
+}
+
+void View::SetTool(Tool tool)
+{
+	if (tool_ == tool) return;
+	tool_ = tool;
+	if (tool.kind != Tool::Kind::Select) EndEditing();
 }
 
 // ----------------------------------------------------------------- drawing
 
-void View::DrawPage(Renderer& renderer, const Transform& transform) const {
-    const Size page = document_->PageSize();
-    const RectF paper =
-        transform.ToDevice(Rect(-page.cx / 2, page.cy / 2, page.cx / 2, -page.cy / 2));
+void View::DrawPage(render::draw_context& dc, const Transform& transform) const
+{
+	const Size page = document_->PageSize();
+	const RectF device = transform.ToDevice(Rect(-page.cx / 2, page.cy / 2, page.cx / 2, -page.cy / 2));
 
-    const float shadow = ui::ScaleF(dpiScale_, 3.0f);
-    ui::FillRoundRect(renderer,
-                      RectF{paper.left + shadow, paper.top + shadow, paper.right + shadow,
-                            paper.bottom + shadow},
-                      shadow, RGB(0, 0, 0), 40);
-    renderer.FillRect(paper, ui::Argb(document_->PaperColour()));
+	// The page sits on whole pixels, so it, its shadow and its grid are rectangles.
+	const Rect paper{static_cast<std::int32_t>(std::lround(device.left)),
+	                 static_cast<std::int32_t>(std::lround(device.top)),
+	                 static_cast<std::int32_t>(std::lround(device.right)),
+	                 static_cast<std::int32_t>(std::lround(device.bottom))};
 
-    // Grid lines are gathered into two paths so the rasterizer runs twice
-    // rather than once per line.
-    if (showGrid_ && transform.scale > 0.25f) {
-        Path minor;
-        Path major;
+	const int shadow = ui::Scale(dpiScale_, 3);
+	const core::color shade = ui::ToCoreColor(RGB(0, 0, 0), 40);
+	dc.draw_rect({paper.right, paper.top + shadow, paper.right + shadow, paper.bottom + shadow}, shade);
+	dc.draw_rect({paper.left + shadow, paper.bottom, paper.right, paper.bottom + shadow}, shade);
+	dc.draw_rect({paper.left, paper.top, paper.right, paper.bottom}, ui::ToCoreColor(document_->PaperColour()));
 
-        for (long x = -page.cx / 2; x <= page.cx / 2; x += kMinorGrid) {
-            const float device = std::floor(transform.ToDevice(Point(x, 0)).x);
-            (x % kMajorGrid == 0 ? major : minor)
-                .AddRect({device, paper.top, device + 1.0f, paper.bottom});
-        }
-        for (long y = -page.cy / 2; y <= page.cy / 2; y += kMinorGrid) {
-            const float device = std::floor(transform.ToDevice(Point(0, y)).y);
-            (y % kMajorGrid == 0 ? major : minor)
-                .AddRect({paper.left, device, paper.right, device + 1.0f});
-        }
+	if (showGrid_ && transform.scale > 0.25f)
+	{
+		const core::color minor = ui::ToCoreColor(RGB(0xE8, 0xEB, 0xF0));
+		const core::color major = ui::ToCoreColor(RGB(0xD3, 0xD9, 0xE2));
 
-        renderer.Fill(minor, SolidPaint(ui::Argb(RGB(0xE8, 0xEB, 0xF0))));
-        renderer.Fill(major, SolidPaint(ui::Argb(RGB(0xD3, 0xD9, 0xE2))));
-    }
+		for (long x = -page.cx / 2; x <= page.cx / 2; x += kMinorGrid)
+		{
+			const auto line = static_cast<int>(std::floor(transform.ToDevice(Point(x, 0)).x));
+			dc.draw_rect({line, paper.top, line + 1, paper.bottom}, x % kMajorGrid == 0 ? major : minor);
+		}
+		for (long y = -page.cy / 2; y <= page.cy / 2; y += kMinorGrid)
+		{
+			const auto line = static_cast<int>(std::floor(transform.ToDevice(Point(0, y)).y));
+			dc.draw_rect({paper.left, line, paper.right, line + 1}, y % kMajorGrid == 0 ? major : minor);
+		}
+	}
 
-    ui::FrameRoundRect(renderer, paper, 0.0f, ui::kBorderStrong, 1.0f);
+	ui::FrameRoundRect(dc, RectF::FromRect(paper).Inflated(0.5f), 0.0f, ui::kBorderStrong, 1.0f);
 }
 
-void View::DrawSelection(Renderer& renderer, const Transform& transform) const {
-    const float handle = ui::ScaleF(dpiScale_, 4.0f);
+void View::DrawSelection(render::draw_context& dc, const Transform& transform) const
+{
+	const float handle = ui::ScaleF(dpiScale_, 4.0f);
 
-    for (const ObjectId id : selection_) {
-        const DrawObj* object = Find(id);
-        if (!object) continue;
+	for (const ObjectId id : selection_)
+	{
+		const DrawObj* object = Find(id);
+		if (!object) continue;
 
-        const RectF bounds = transform.ToDevice(object->Bounds());
-        ui::FrameRoundRect(renderer, bounds, 2.0f, ui::kAccent, 1.0f);
+		const RectF bounds = transform.ToDevice(object->Bounds());
+		ui::FrameRoundRect(dc, bounds, 2.0f, ui::kAccent, 1.0f);
 
-        if (selection_.size() > 1) continue;
+		if (selection_.size() > 1) continue;
 
-        for (int i = 0; i < object->HandleCount(); ++i) {
-            const Vec2 point = transform.ToDevice(object->Handle(i));
-            const RectF box{point.x - handle, point.y - handle, point.x + handle,
-                            point.y + handle};
-            ui::FillRoundRect(renderer, box, 2.0f, ui::kPanel);
-            ui::FrameRoundRect(renderer, box.Inflated(-0.5f), 2.0f, ui::kAccent, 1.4f);
-        }
-    }
+		for (int i = 0; i < object->HandleCount(); ++i)
+		{
+			const Vec2 point = transform.ToDevice(object->Handle(i));
+			const RectF box{point.x - handle, point.y - handle, point.x + handle, point.y + handle};
+			ui::FillRoundRect(dc, box, 2.0f, ui::kPanel);
+			ui::FrameRoundRect(dc, box.Inflated(-0.5f), 2.0f, ui::kAccent, 1.4f);
+		}
+	}
 }
 
-void View::DrawCaret(Renderer& renderer, Canvas& canvas,
-                     const Transform& transform) const {
-    const DrawObj* object = Find(editing_);
-    if (!object) return;
+void View::DrawCaret(render::draw_context& dc, const Transform& transform) const
+{
+	const DrawObj* object = Find(editing_);
+	if (!object) return;
 
-    const render::font_face font = CreateStyleFont(object->style, transform.scale);
+	const render::font_face font = CreateStyleFont(object->style, transform.scale);
 
-    auto context = render::create_surface_context(canvas.Surface());
-    if (!context) return;
-    const auto full = context->measure_text(core::utf16_to_utf8(object->text), font,
-                                            render::text_style::single_line, 100000);
-    const auto prefix = context->measure_text(
-        core::utf16_to_utf8(object->text.substr(0, caret_)), font,
-        render::text_style::single_line, 100000);
-    const int lineHeight = context->text_line_height(font);
+	const auto full = dc.measure_text(core::utf16_to_utf8(object->text), font, render::text_style::single_line, 100000);
+	const auto prefix = dc.measure_text(core::utf16_to_utf8(object->text.substr(0, caret_)), font,
+	                                    render::text_style::single_line, 100000);
+	const int lineHeight = dc.text_line_height(font);
 
-    const Rect label = LabelRect(*object, transform);
-    const float centreX = (label.left + label.right) * 0.5f;
-    const float centreY = (label.top + label.bottom) * 0.5f;
-    const float x = centreX - full.cx * 0.5f + prefix.cx;
-    const float half = lineHeight * 0.5f;
+	const Rect label = LabelRect(*object, transform);
+	const float centreX = (label.left + label.right) * 0.5f;
+	const float centreY = (label.top + label.bottom) * 0.5f;
+	const float x = centreX - full.cx * 0.5f + prefix.cx;
+	const float half = lineHeight * 0.5f;
 
-    renderer.FillRect({x, centreY - half, x + ui::ScaleF(dpiScale_, 1.5f), centreY + half},
-                      ui::Argb(object->style.textColour));
+	ui::FillRoundRect(dc, {x, centreY - half, x + ui::ScaleF(dpiScale_, 1.5f), centreY + half}, 0.0f,
+	                  object->style.textColour);
 }
 
-View::ZoomBadge View::BadgeLayout() const {
-    const Rect client{0, 0, viewport_.cx, viewport_.cy};
+View::ZoomBadge View::BadgeLayout() const
+{
+	const Rect client{0, 0, viewport_.cx, viewport_.cy};
 
-    const int margin = ui::Scale(dpiScale_, 10);
-    const int height = ui::Scale(dpiScale_, 24);
-    const int button = ui::Scale(dpiScale_, 26);
-    const int label = ui::Scale(dpiScale_, 52);
+	const int margin = ui::Scale(dpiScale_, 10);
+	const int height = ui::Scale(dpiScale_, 24);
+	const int button = ui::Scale(dpiScale_, 26);
+	const int label = ui::Scale(dpiScale_, 52);
 
-    ZoomBadge badge;
-    badge.bounds = Rect{margin, client.bottom - margin - height, margin + button * 2 + label,
-                        client.bottom - margin};
-    badge.minus = Rect{badge.bounds.left, badge.bounds.top, badge.bounds.left + button,
-                       badge.bounds.bottom};
-    badge.label = Rect{badge.minus.right, badge.bounds.top, badge.minus.right + label,
-                       badge.bounds.bottom};
-    badge.plus = Rect{badge.label.right, badge.bounds.top, badge.bounds.right,
-                      badge.bounds.bottom};
-    return badge;
+	ZoomBadge badge;
+	badge.bounds = Rect{margin, client.bottom - margin - height, margin + button * 2 + label, client.bottom - margin};
+	badge.minus = Rect{badge.bounds.left, badge.bounds.top, badge.bounds.left + button, badge.bounds.bottom};
+	badge.label = Rect{badge.minus.right, badge.bounds.top, badge.minus.right + label, badge.bounds.bottom};
+	badge.plus = Rect{badge.label.right, badge.bounds.top, badge.bounds.right, badge.bounds.bottom};
+	return badge;
 }
 
-void View::DrawZoomBadge(Renderer& renderer, Canvas& canvas) const {
-    const ZoomBadge badge = BadgeLayout();
-    const RectF bounds = RectF::FromRect(badge.bounds);
-    const float radius = ui::ScaleF(dpiScale_, 5.0f);
+void View::DrawZoomBadge(render::draw_context& dc) const
+{
+	const ZoomBadge badge = BadgeLayout();
+	const RectF bounds = RectF::FromRect(badge.bounds);
+	const float radius = ui::ScaleF(dpiScale_, 5.0f);
 
-    ui::FillRoundRect(renderer, bounds, radius, ui::kPanel, 235);
-    ui::FrameRoundRect(renderer, bounds.Inflated(-0.5f), radius, ui::kBorder, 1.0f);
+	ui::FillRoundRect(dc, bounds, radius, ui::kPanel, 235);
+	ui::FrameRoundRect(dc, bounds.Inflated(-0.5f), radius, ui::kBorder, 1.0f);
 
-    const float arm = ui::ScaleF(dpiScale_, 4.5f);
-    const Vec2 minus = RectF::FromRect(badge.minus).Centre();
-    ui::Line(renderer, {minus.x - arm, minus.y}, {minus.x + arm, minus.y}, ui::kText, 1.4f);
+	const float arm = ui::ScaleF(dpiScale_, 4.5f);
+	const Vec2 minus = RectF::FromRect(badge.minus).Centre();
+	ui::Line(dc, {minus.x - arm, minus.y}, {minus.x + arm, minus.y}, ui::kText, 1.4f);
 
-    const Vec2 plus = RectF::FromRect(badge.plus).Centre();
-    ui::Line(renderer, {plus.x - arm, plus.y}, {plus.x + arm, plus.y}, ui::kText, 1.4f);
-    ui::Line(renderer, {plus.x, plus.y - arm}, {plus.x, plus.y + arm}, ui::kText, 1.4f);
+	const Vec2 plus = RectF::FromRect(badge.plus).Centre();
+	ui::Line(dc, {plus.x - arm, plus.y}, {plus.x + arm, plus.y}, ui::kText, 1.4f);
+	ui::Line(dc, {plus.x, plus.y - arm}, {plus.x, plus.y + arm}, ui::kText, 1.4f);
 
-    const auto percent = static_cast<int>(std::lround(zoom_ * 100.0f));
-    ui::Text(canvas, badge.label, std::to_wstring(percent) + L"%", ui::kText,
-             ui::TextAlign::center, ui::Font(dpiScale_));
+	const auto percent = static_cast<int>(std::lround(zoom_ * 100.0f));
+	ui::Text(dc, badge.label, std::to_wstring(percent) + L"%", ui::kText, ui::TextAlign::center, ui::Font(dpiScale_));
 }
 
-void View::Render(Renderer& renderer, Canvas& canvas) const {
-    renderer.Clear(ui::Argb(ui::kWorkspace));
+void View::Render(render::draw_context& dc) const
+{
+	dc.draw_rect({0, 0, viewport_.cx, viewport_.cy}, ui::ToCoreColor(ui::kWorkspace));
 
-    const Transform transform = GetTransform();
-    DrawPage(renderer, transform);
+	const Transform transform = GetTransform();
+	DrawPage(dc, transform);
 
-    document_->Draw(renderer, canvas, transform, editing_);
+	document_->Draw(dc, transform, editing_);
 
-    if (document_->Objects().empty()) {
-        // Centred on what the user can actually see, not on the page.
-        const Rect hint{0, 0, viewport_.cx, viewport_.cy};
-        ui::Text(canvas, hint, L"Pick a shape on the left, then click or drag here", ui::kTextDim,
-                 ui::TextAlign::center, ui::Font(dpiScale_));
-    }
+	if (document_->Objects().empty())
+	{
+		// Centred on what the user can actually see, not on the page.
+		const Rect hint{0, 0, viewport_.cx, viewport_.cy};
+		ui::Text(dc, hint, L"Pick a shape on the left, then click or drag here", ui::kTextDim, ui::TextAlign::center,
+		         ui::Font(dpiScale_));
+	}
 
-    DrawSelection(renderer, transform);
+	DrawSelection(dc, transform);
 
-    if (bandActive_) {
-        const RectF band = RectF::FromRect(band_.Normalized());
-        renderer.FillRect(band, ui::Argb(ui::kAccent, 40));
-        ui::FrameRoundRect(renderer, band, 0.0f, ui::kAccent, 1.0f);
-    }
+	if (bandActive_)
+	{
+		const RectF band = RectF::FromRect(band_.Normalized());
+		ui::FillRoundRect(dc, band, 0.0f, ui::kAccent, 40);
+		ui::FrameRoundRect(dc, band, 0.0f, ui::kAccent, 1.0f);
+	}
 
-    if (editing_ != ObjectId::None && caretVisible_) DrawCaret(renderer, canvas, transform);
+	if (editing_ != ObjectId::None && caretVisible_) DrawCaret(dc, transform);
 
-    DrawZoomBadge(renderer, canvas);
+	DrawZoomBadge(dc);
 }
 
-void View::Invalidate() const {
-    if (onInvalidate) onInvalidate();
+void View::Invalidate() const
+{
+	if (onInvalidate) onInvalidate();
 }
 
-void View::Changed() {
-    if (onChanged) onChanged();
+void View::Changed()
+{
+	if (onChanged) onChanged();
 }
 
 // ------------------------------------------------------- scrolling / zoom
 
-void View::UpdateScrollBars() {
-    const Transform transform = GetTransform();
-    const Size page = document_->PageSize();
-    const auto margin = ui::Scale(dpiScale_, kPageMargin);
+void View::UpdateScrollBars()
+{
+	const Transform transform = GetTransform();
+	const Size page = document_->PageSize();
+	const auto margin = ui::Scale(dpiScale_, kPageMargin);
 
-    extent_ = Size(static_cast<std::int32_t>(page.cx * transform.scale) + margin * 2,
-                   static_cast<std::int32_t>(page.cy * transform.scale) + margin * 2);
+	extent_ = Size(static_cast<std::int32_t>(page.cx * transform.scale) + margin * 2,
+	               static_cast<std::int32_t>(page.cy * transform.scale) + margin * 2);
 
-    scroll_.x = (std::clamp)(scroll_.x, 0, (std::max)(0, extent_.cx - viewport_.cx));
-    scroll_.y = (std::clamp)(scroll_.y, 0, (std::max)(0, extent_.cy - viewport_.cy));
+	scroll_.x = (std::clamp)(scroll_.x, 0, (std::max)(0, extent_.cx - viewport_.cx));
+	scroll_.y = (std::clamp)(scroll_.y, 0, (std::max)(0, extent_.cy - viewport_.cy));
 }
 
-void View::ScrollTo(Point scroll) {
-    scroll.x = (std::clamp)(scroll.x, 0, (std::max)(0, extent_.cx - viewport_.cx));
-    scroll.y = (std::clamp)(scroll.y, 0, (std::max)(0, extent_.cy - viewport_.cy));
-    if (scroll == scroll_) return;
+void View::ScrollTo(Point scroll)
+{
+	scroll.x = (std::clamp)(scroll.x, 0, (std::max)(0, extent_.cx - viewport_.cx));
+	scroll.y = (std::clamp)(scroll.y, 0, (std::max)(0, extent_.cy - viewport_.cy));
+	if (scroll == scroll_) return;
 
-    scroll_ = scroll;
-    UpdateScrollBars();
-    Invalidate();
+	scroll_ = scroll;
+	UpdateScrollBars();
+	Invalidate();
 }
 
-void View::SetZoom(float zoom, Point anchor) {
-    zoom = (std::clamp)(zoom, kMinZoom, kMaxZoom);
-    if (std::fabs(zoom - zoom_) < 1e-4f) return;
+void View::SetZoom(float zoom, Point anchor)
+{
+	zoom = (std::clamp)(zoom, kMinZoom, kMaxZoom);
+	if (std::fabs(zoom - zoom_) < 1e-4f) return;
 
-    // Keep whatever sits under `anchor` pinned there.
-    const Point pinned = ToDoc(anchor);
-    zoom_ = zoom;
-    UpdateScrollBars();
+	// Keep whatever sits under `anchor` pinned there.
+	const Point pinned = ToDoc(anchor);
+	zoom_ = zoom;
+	UpdateScrollBars();
 
-    const Vec2 moved = GetTransform().ToDevice(pinned);
-    ScrollTo(Point(scroll_.x + static_cast<long>(moved.x) - anchor.x,
-                   scroll_.y + static_cast<long>(moved.y) - anchor.y));
+	const Vec2 moved = GetTransform().ToDevice(pinned);
+	ScrollTo(
+		Point(scroll_.x + static_cast<long>(moved.x) - anchor.x, scroll_.y + static_cast<long>(moved.y) - anchor.y));
 
-    UpdateScrollBars();
-    Invalidate();
-    Changed();
+	UpdateScrollBars();
+	Invalidate();
+	Changed();
 }
 
-void View::ZoomBy(float factor) {
-    const Rect client{0, 0, viewport_.cx, viewport_.cy};
-    SetZoom(zoom_ * factor, Point{client.right / 2, client.bottom / 2});
+void View::ZoomBy(float factor)
+{
+	const Rect client{0, 0, viewport_.cx, viewport_.cy};
+	SetZoom(zoom_ * factor, Point{client.right / 2, client.bottom / 2});
 }
 
-void View::ZoomToFit() {
-    const Rect client{0, 0, viewport_.cx, viewport_.cy};
+void View::ZoomToFit()
+{
+	const Rect client{0, 0, viewport_.cx, viewport_.cy};
 
-    const Size page = document_->PageSize();
-    const float base = static_cast<float>(dpiScale_ * 96.0 / 100.0);
-    const float margin = ui::ScaleF(dpiScale_, static_cast<float>(kPageMargin)) * 2.0f;
+	const Size page = document_->PageSize();
+	const float base = static_cast<float>(dpiScale_ * 96.0 / 100.0);
+	const float margin = ui::ScaleF(dpiScale_, static_cast<float>(kPageMargin)) * 2.0f;
 
-    const float available = (std::max)(1.0f, static_cast<float>(client.right) - margin);
-    const float availableY = (std::max)(1.0f, static_cast<float>(client.bottom) - margin);
+	const float available = (std::max)(1.0f, static_cast<float>(client.right) - margin);
+	const float availableY = (std::max)(1.0f, static_cast<float>(client.bottom) - margin);
 
-    SetZoom((std::min)(available / (page.cx * base), availableY / (page.cy * base)),
-            Point{client.right / 2, client.bottom / 2});
+	SetZoom((std::min)(available / (page.cx * base), availableY / (page.cy * base)),
+	        Point{client.right / 2, client.bottom / 2});
 }
 
-void View::OnMouseWheel(const Point point, const int delta, const bool control, const bool shift) {
-    if (control) {
-        SetZoom(zoom_ * std::pow(kZoomStep, static_cast<float>(delta) / 120.0f), point);
-        return;
-    }
+void View::OnMouseWheel(const Point point, const int delta, const bool control, const bool shift)
+{
+	if (control)
+	{
+		SetZoom(zoom_ * std::pow(kZoomStep, static_cast<float>(delta) / 120.0f), point);
+		return;
+	}
 
-    Point target = scroll_;
-    const long step = delta * ui::Scale(dpiScale_, 60) / 120;
-    if (shift)
-        target.x -= step;
-    else
-        target.y -= step;
-    ScrollTo(target);
+	Point target = scroll_;
+	const long step = delta * ui::Scale(dpiScale_, 60) / 120;
+	if (shift) target.x -= step;
+	else target.y -= step;
+	ScrollTo(target);
 }
 
 // ---------------------------------------------------------------- clipboard
 
-void View::Copy() {
-    if (selection_.empty()) return;
+void View::Copy()
+{
+	if (selection_.empty()) return;
 
-    Document::ObjectList clones;
-    clones.reserve(selection_.size());
-    for (const ObjectId id : selection_) {
-        if (const DrawObj* object = Find(id)) clones.push_back(*object);
-    }
+	Document::ObjectList clones;
+	clones.reserve(selection_.size());
+	for (const ObjectId id : selection_)
+	{
+		if (const DrawObj* object = Find(id)) clones.push_back(*object);
+	}
 
-    const std::string text = ObjectsToJson(clones).Dump();
-    platform::set_clipboard(text);
+	const std::string text = ObjectsToJson(clones).Dump();
+	platform::set_clipboard(text);
 }
 
-bool View::ClipboardHasObjects() const {
-    const auto text = platform::clipboard_text();
-    if (!text || text->empty()) return false;
-    try {
-        return Json::Parse(*text).IsArray();
-    } catch (const std::exception&) {
-        return false;
-    }
+bool View::ClipboardHasObjects() const
+{
+	const auto text = platform::clipboard_text();
+	if (!text || text->empty()) return false;
+	try
+	{
+		return Json::Parse(*text).IsArray();
+	}
+	catch (const std::exception&)
+	{
+		return false;
+	}
 }
 
-void View::Paste() {
-    const auto text = platform::clipboard_text();
-    if (!text || text->empty()) return;
+void View::Paste()
+{
+	const auto text = platform::clipboard_text();
+	if (!text || text->empty()) return;
 
-    Document::ObjectList pasted;
-    try {
-        pasted = ObjectsFromJson(Json::Parse(*text));
-    } catch (const std::exception&) {
-        return;
-    }
+	Document::ObjectList pasted;
+	try
+	{
+		pasted = ObjectsFromJson(Json::Parse(*text));
+	}
+	catch (const std::exception&)
+	{
+		return;
+	}
 
-    document_->BeginChange();
-    selection_.clear();
-    for (DrawObj& object : pasted) {
-        object.Offset(Size(kMinorGrid, -kMinorGrid));
-        selection_.push_back(document_->Add(std::move(object)));
-    }
-    document_->CommitChange();
+	document_->BeginChange();
+	selection_.clear();
+	for (DrawObj& object : pasted)
+	{
+		object.Offset(Size(kMinorGrid, -kMinorGrid));
+		selection_.push_back(document_->Add(std::move(object)));
+	}
+	document_->CommitChange();
 
-    Invalidate();
-    Changed();
+	Invalidate();
+	Changed();
 }
 
 // -------------------------------------------------------------- interaction
 
-void View::CreateAt(ShapeKind kind, Point clientPoint) {
-    Style style = style_;
-    if (IsLinear(kind)) {
-        style.hasFill = false;
-        style.endArrow = kind == ShapeKind::Arrow;
-    }
+void View::CreateAt(ShapeKind kind, Point clientPoint)
+{
+	Style style = style_;
+	if (IsLinear(kind))
+	{
+		style.hasFill = false;
+		style.endArrow = kind == ShapeKind::Arrow;
+	}
 
-    const Point centre = Snap(ToDoc(clientPoint));
+	const Point centre = Snap(ToDoc(clientPoint));
 
-    document_->BeginChange();
-    const ObjectId id =
-        document_->Add(DrawObj(kind, CentredRect(centre, kDefaultWidth, kDefaultHeight), style));
-    document_->CommitChange();
+	document_->BeginChange();
+	const ObjectId id = document_->Add(DrawObj(kind, CentredRect(centre, kDefaultWidth, kDefaultHeight), style));
+	document_->CommitChange();
 
-    Select(id, false);
-    Invalidate();
+	Select(id, false);
+	Invalidate();
 }
 
-void View::OnLeftDown(const Point point, const bool shift, const bool control, const bool alt) {
-    shiftHeld_ = shift;
-    altHeld_ = alt;
+void View::OnLeftDown(const Point point, const bool shift, const bool control, const bool alt)
+{
+	shiftHeld_ = shift;
+	altHeld_ = alt;
 
-    const ZoomBadge badge = BadgeLayout();
-    if (point.x >= badge.minus.left && point.x < badge.minus.right &&
-        point.y >= badge.minus.top && point.y < badge.minus.bottom) {
-        ZoomBy(1.0f / kZoomStep);
-        return;
-    }
-    if (point.x >= badge.plus.left && point.x < badge.plus.right &&
-        point.y >= badge.plus.top && point.y < badge.plus.bottom) {
-        ZoomBy(kZoomStep);
-        return;
-    }
-    if (point.x >= badge.label.left && point.x < badge.label.right &&
-        point.y >= badge.label.top && point.y < badge.label.bottom) {
-        SetZoom(1.0f, Point{badge.label.left, badge.label.top});
-        return;
-    }
+	const ZoomBadge badge = BadgeLayout();
+	if (point.x >= badge.minus.left && point.x < badge.minus.right && point.y >= badge.minus.top &&
+	    point.y < badge.minus.bottom)
+	{
+		ZoomBy(1.0f / kZoomStep);
+		return;
+	}
+	if (point.x >= badge.plus.left && point.x < badge.plus.right && point.y >= badge.plus.top &&
+	    point.y < badge.plus.bottom)
+	{
+		ZoomBy(kZoomStep);
+		return;
+	}
+	if (point.x >= badge.label.left && point.x < badge.label.right && point.y >= badge.label.top &&
+	    point.y < badge.label.bottom)
+	{
+		SetZoom(1.0f, Point{badge.label.left, badge.label.top});
+		return;
+	}
 
-    const Point local = ToDoc(point);
-    if (editing_ != ObjectId::None) {
-        // Clicking inside the label being typed just moves the caret.
-        const DrawObj* object = Find(editing_);
-        if (object && object->HitTest(local, HitTolerance())) {
-            caret_ = CaretIndexAt(point);
-            caretVisible_ = true;
-            Invalidate();
-            return;
-        }
-        EndEditing();
-    }
+	const Point local = ToDoc(point);
+	if (editing_ != ObjectId::None)
+	{
+		// Clicking inside the label being typed just moves the caret.
+		const DrawObj* object = Find(editing_);
+		if (object && object->HitTest(local, HitTolerance()))
+		{
+			caret_ = CaretIndexAt(point);
+			caretVisible_ = true;
+			Invalidate();
+			return;
+		}
+		EndEditing();
+	}
 
-    dragOrigin_ = local;
-    drag_ = Drag::None;
-    dragHandle_ = 0;
+	dragOrigin_ = local;
+	drag_ = Drag::None;
+	dragHandle_ = 0;
 
-    if (tool_.kind != Tool::Kind::Select) {
-        Style style = style_;
-        const bool linear = IsLinear(tool_.shape);
-        if (tool_.kind == Tool::Kind::Text) {
-            style.hasFill = false;
-            style.hasLine = false;
-        } else if (linear) {
-            style.hasFill = false;
-            style.endArrow = tool_.shape == ShapeKind::Arrow;
-        }
+	if (tool_.kind != Tool::Kind::Select)
+	{
+		Style style = style_;
+		const bool linear = IsLinear(tool_.shape);
+		if (tool_.kind == Tool::Kind::Text)
+		{
+			style.hasFill = false;
+			style.hasLine = false;
+		}
+		else if (linear)
+		{
+			style.hasFill = false;
+			style.endArrow = tool_.shape == ShapeKind::Arrow;
+		}
 
-        const ShapeKind kind =
-            tool_.kind == Tool::Kind::Text ? ShapeKind::Rectangle : tool_.shape;
+		const ShapeKind kind = tool_.kind == Tool::Kind::Text ? ShapeKind::Rectangle : tool_.shape;
 
-        document_->BeginChange();
-        dragChange_ = true;
+		document_->BeginChange();
+		dragChange_ = true;
 
-        const Point start = Snap(local);
-        const Rect bounds(start, Size(0, 0));
+		const Point start = Snap(local);
+		const Rect bounds(start, Size(0, 0));
 
-        selection_.assign(1, document_->Add(DrawObj(kind, bounds, style)));
-        drag_ = Drag::Resize;
-        dragHandle_ = linear ? 1 : 4;
-        dragStart_ = bounds;
-        dragOrigin_ = start;
-        captured_ = true;
-        if (onCapture) onCapture(true);
-        Invalidate();
-        Changed();
-        return;
-    }
+		selection_.assign(1, document_->Add(DrawObj(kind, bounds, style)));
+		drag_ = Drag::Resize;
+		dragHandle_ = linear ? 1 : 4;
+		dragStart_ = bounds;
+		dragOrigin_ = start;
+		captured_ = true;
+		if (onCapture) onCapture(true);
+		Invalidate();
+		Changed();
+		return;
+	}
 
-    // Resize handles win over everything else, for a single selection.
-    if (selection_.size() == 1) {
-        const DrawObj* object = Primary();
-        const int handle = object ? HandleAt(*object, local) : -1;
-        if (handle >= 0) {
-            document_->BeginChange();
-            dragChange_ = true;
-            drag_ = Drag::Resize;
-            dragHandle_ = handle;
-            dragStart_ = object->position;
-            captured_ = true;
-            if (onCapture) onCapture(true);
-            return;
-        }
-    }
+	// Resize handles win over everything else, for a single selection.
+	if (selection_.size() == 1)
+	{
+		const DrawObj* object = Primary();
+		const int handle = object ? HandleAt(*object, local) : -1;
+		if (handle >= 0)
+		{
+			document_->BeginChange();
+			dragChange_ = true;
+			drag_ = Drag::Resize;
+			dragHandle_ = handle;
+			dragStart_ = object->position;
+			captured_ = true;
+			if (onCapture) onCapture(true);
+			return;
+		}
+	}
 
-    if (const ObjectId hit = document_->ObjectAt(local, HitTolerance()); hit != ObjectId::None) {
-        const bool add = shift;
-        const bool selected = IsSelected(hit);
+	if (const ObjectId hit = document_->ObjectAt(local, HitTolerance()); hit != ObjectId::None)
+	{
+		const bool add = shift;
+		const bool selected = IsSelected(hit);
 
-        if (add && selected)
-            RemoveFromSelection(hit);
-        else if (!selected)
-            Select(hit, add);
+		if (add && selected) RemoveFromSelection(hit);
+		else if (!selected) Select(hit, add);
 
-        if (!selection_.empty()) {
-            document_->BeginChange();
-            dragChange_ = true;
-            if (control) DuplicateSelection();
-            drag_ = Drag::Move;
-            if (const DrawObj* primary = Primary()) dragStart_ = primary->position;
-            captured_ = true;
-            if (onCapture) onCapture(true);
-        }
-        Invalidate();
-        Changed();
-        return;
-    }
+		if (!selection_.empty())
+		{
+			document_->BeginChange();
+			dragChange_ = true;
+			if (control) DuplicateSelection();
+			drag_ = Drag::Move;
+			if (const DrawObj* primary = Primary()) dragStart_ = primary->position;
+			captured_ = true;
+			if (onCapture) onCapture(true);
+		}
+		Invalidate();
+		Changed();
+		return;
+	}
 
-    if (!shift) ClearSelection();
-    drag_ = Drag::Band;
-    bandActive_ = true;
-    band_ = Rect(point.x, point.y, point.x, point.y);
-    captured_ = true;
-    if (onCapture) onCapture(true);
+	if (!shift) ClearSelection();
+	drag_ = Drag::Band;
+	bandActive_ = true;
+	band_ = Rect(point.x, point.y, point.x, point.y);
+	captured_ = true;
+	if (onCapture) onCapture(true);
 }
 
-void View::SetCursor(const platform::cursor cursor) const {
-    if (onCursor) onCursor(cursor);
+void View::SetCursor(const platform::cursor cursor) const
+{
+	if (onCursor) onCursor(cursor);
 }
 
-void View::OnMouseMove(const Point point, const bool shift, const bool control, const bool alt) {
-    (void)control;
-    shiftHeld_ = shift;
-    altHeld_ = alt;
-    const Point local = ToDoc(point);
+void View::OnMouseMove(const Point point, const bool shift, const bool control, const bool alt)
+{
+	(void)control;
+	shiftHeld_ = shift;
+	altHeld_ = alt;
+	const Point local = ToDoc(point);
 
-    if (drag_ == Drag::None) {
-        platform::cursor cursor = platform::cursor::normal;
-        if (tool_.kind == Tool::Kind::Text) {
-            cursor = platform::cursor::text_select;
-        } else if (tool_.kind == Tool::Kind::Shape) {
-            cursor = platform::cursor::link;
-        } else {
-            const DrawObj* primary = selection_.size() == 1 ? Primary() : nullptr;
-            const int handle = primary ? HandleAt(*primary, local) : -1;
-            if (handle >= 0) {
-                cursor = (handle == 1 || handle == 5)
-                              ? platform::cursor::up_down
-                              : (handle == 3 || handle == 7)
-                                    ? platform::cursor::left_right
-                                    : platform::cursor::link;
-            } else if (IsSelected(document_->ObjectAt(local, HitTolerance()))) {
-                cursor = platform::cursor::link;
-            }
-        }
+	if (drag_ == Drag::None)
+	{
+		platform::cursor cursor = platform::cursor::normal;
+		if (tool_.kind == Tool::Kind::Text)
+		{
+			cursor = platform::cursor::text_select;
+		}
+		else if (tool_.kind == Tool::Kind::Shape)
+		{
+			cursor = platform::cursor::link;
+		}
+		else
+		{
+			const DrawObj* primary = selection_.size() == 1 ? Primary() : nullptr;
+			const int handle = primary ? HandleAt(*primary, local) : -1;
+			if (handle >= 0)
+			{
+				cursor = (handle == 1 || handle == 5)   ? platform::cursor::up_down
+				         : (handle == 3 || handle == 7) ? platform::cursor::left_right
+				                                        : platform::cursor::link;
+			}
+			else if (IsSelected(document_->ObjectAt(local, HitTolerance())))
+			{
+				cursor = platform::cursor::link;
+			}
+		}
 
-        const ZoomBadge badge = BadgeLayout();
-        if (point.x >= badge.bounds.left && point.x < badge.bounds.right &&
-            point.y >= badge.bounds.top && point.y < badge.bounds.bottom)
-            cursor = platform::cursor::link;
+		const ZoomBadge badge = BadgeLayout();
+		if (point.x >= badge.bounds.left && point.x < badge.bounds.right && point.y >= badge.bounds.top &&
+		    point.y < badge.bounds.bottom)
+			cursor = platform::cursor::link;
 
-        SetCursor(cursor);
-        return;
-    }
+		SetCursor(cursor);
+		return;
+	}
 
-    switch (drag_) {
-        case Drag::Band:
-            band_.right = point.x;
-            band_.bottom = point.y;
-            Invalidate();
-            break;
+	switch (drag_)
+	{
+	case Drag::Band:
+		band_.right = point.x;
+		band_.bottom = point.y;
+		Invalidate();
+		break;
 
-        case Drag::Move: {
-            SetCursor(platform::cursor::link);
+	case Drag::Move:
+	{
+		SetCursor(platform::cursor::link);
 
-            const DrawObj* primary = Primary();
-            if (!primary) break;
+		const DrawObj* primary = Primary();
+		if (!primary) break;
 
-            // Snap the object the drag started on; everything else follows it.
-            const Size raw = local - dragOrigin_;
-            const Point wanted = Snap(dragStart_.TopLeft() + raw);
-            const Size delta = wanted - primary->position.TopLeft();
-            if (delta.cx == 0 && delta.cy == 0) break;
+		// Snap the object the drag started on; everything else follows it.
+		const Size raw = local - dragOrigin_;
+		const Point wanted = Snap(dragStart_.TopLeft() + raw);
+		const Size delta = wanted - primary->position.TopLeft();
+		if (delta.cx == 0 && delta.cy == 0) break;
 
-            for (const ObjectId id : selection_) {
-                if (DrawObj* object = Find(id)) object->Offset(delta);
-            }
-            Invalidate();
-            break;
-        }
+		for (const ObjectId id : selection_)
+		{
+			if (DrawObj* object = Find(id)) object->Offset(delta);
+		}
+		Invalidate();
+		break;
+	}
 
-        case Drag::Resize: {
-            DrawObj* primary = Primary();
-            if (!primary) break;
+	case Drag::Resize:
+	{
+		DrawObj* primary = Primary();
+		if (!primary) break;
 
-            SetCursor((dragHandle_ == 1 || dragHandle_ == 5)
-                          ? platform::cursor::up_down
-                          : (dragHandle_ == 3 || dragHandle_ == 7)
-                                ? platform::cursor::left_right
-                                : platform::cursor::link);
+		SetCursor((dragHandle_ == 1 || dragHandle_ == 5)   ? platform::cursor::up_down
+		          : (dragHandle_ == 3 || dragHandle_ == 7) ? platform::cursor::left_right
+		                                                   : platform::cursor::link);
 
-            Point target = Snap(local);
-            // Shift keeps a shape square, pivoting on the opposite corner.
-            if (shift && !IsLinear(primary->kind))
-                target = SquareCornerTarget(dragStart_, dragHandle_, target);
-            primary->MoveHandle(dragHandle_, target);
-            Invalidate();
-            break;
-        }
+		Point target = Snap(local);
+		// Shift keeps a shape square, pivoting on the opposite corner.
+		if (shift && !IsLinear(primary->kind)) target = SquareCornerTarget(dragStart_, dragHandle_, target);
+		primary->MoveHandle(dragHandle_, target);
+		Invalidate();
+		break;
+	}
 
-        case Drag::None: break;
-    }
+	case Drag::None: break;
+	}
 }
 
-std::size_t View::CaretIndexAt(const Point clientPoint) const {
-    const DrawObj* object = Find(editing_);
-    if (!object || object->text.empty()) return 0;
+std::size_t View::CaretIndexAt(const Point clientPoint) const
+{
+	const DrawObj* object = Find(editing_);
+	if (!object || object->text.empty()) return 0;
 
-    const Transform transform = GetTransform();
-    const render::font_face font = CreateStyleFont(object->style, transform.scale);
-    auto context = render::create_surface_context(std::make_shared<core::surface>());
-    if (!context) return object->text.size();
-    const auto full = context->measure_text(core::utf16_to_utf8(object->text), font,
-                                            render::text_style::single_line, 100000);
+	const Transform transform = GetTransform();
+	const render::font_face font = CreateStyleFont(object->style, transform.scale);
+	auto context = render::create_surface_context(std::make_shared<core::surface>());
+	if (!context) return object->text.size();
+	const auto full = context->measure_text(core::utf16_to_utf8(object->text), font, render::text_style::single_line,
+	                                        100000);
 
-    const Rect label = LabelRect(*object, transform);
-    const int origin = (label.left + label.right) / 2 - full.cx / 2;
+	const Rect label = LabelRect(*object, transform);
+	const int origin = (label.left + label.right) / 2 - full.cx / 2;
 
-    std::size_t best = 0;
-    int bestDistance = std::abs(clientPoint.x - origin);
-    for (std::size_t i = 1; i <= object->text.size(); ++i) {
-        if (!IsCaretStop(object->text, i)) continue;
-        const auto prefix = context->measure_text(
-            core::utf16_to_utf8(object->text.substr(0, i)), font,
-            render::text_style::single_line, 100000);
-        const int distance = std::abs(clientPoint.x - (origin + prefix.cx));
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            best = i;
-        }
-    }
+	std::size_t best = 0;
+	int bestDistance = std::abs(clientPoint.x - origin);
+	for (std::size_t i = 1; i <= object->text.size(); ++i)
+	{
+		if (!IsCaretStop(object->text, i)) continue;
+		const auto prefix = context->measure_text(core::utf16_to_utf8(object->text.substr(0, i)), font,
+		                                          render::text_style::single_line, 100000);
+		const int distance = std::abs(clientPoint.x - (origin + prefix.cx));
+		if (distance < bestDistance)
+		{
+			bestDistance = distance;
+			best = i;
+		}
+	}
 
-    return best;
+	return best;
 }
 
-void View::EndDragChange() {
-    if (!dragChange_) return;
-    dragChange_ = false;
-    document_->CommitChange();
+void View::EndDragChange()
+{
+	if (!dragChange_) return;
+	dragChange_ = false;
+	document_->CommitChange();
 }
 
-void View::OnLeftUp(const Point point, const bool shift, const bool control, const bool alt) {
-    shiftHeld_ = shift;
-    altHeld_ = alt;
-    const Drag drag = drag_;
-    drag_ = Drag::None;
-    if (captured_) {
-        captured_ = false;
-        if (onCapture) onCapture(false);
-    }
+void View::OnLeftUp(const Point point, const bool shift, const bool control, const bool alt)
+{
+	shiftHeld_ = shift;
+	altHeld_ = alt;
+	const Drag drag = drag_;
+	drag_ = Drag::None;
+	if (captured_)
+	{
+		captured_ = false;
+		if (onCapture) onCapture(false);
+	}
 
-    if (drag == Drag::Band) {
-        bandActive_ = false;
-        const Rect device = band_.Normalized();
+	if (drag == Drag::Band)
+	{
+		bandActive_ = false;
+		const Rect device = band_.Normalized();
 
-        const Transform transform = GetTransform();
-        const Point corner = transform.ToDoc(
-            Vec2{static_cast<float>(device.left), static_cast<float>(device.top)});
-        const Point opposite = transform.ToDoc(
-            Vec2{static_cast<float>(device.right), static_cast<float>(device.bottom)});
-        const Rect area(corner.x, corner.y, opposite.x, opposite.y);
+		const Transform transform = GetTransform();
+		const Point corner = transform.ToDoc(Vec2{static_cast<float>(device.left), static_cast<float>(device.top)});
+		const Point opposite = transform.ToDoc(
+			Vec2{static_cast<float>(device.right), static_cast<float>(device.bottom)});
+		const Rect area(corner.x, corner.y, opposite.x, opposite.y);
 
-        for (const DrawObj& object : document_->Objects()) {
-            if (object.IsWithin(area)) AddToSelection(object.id);
-        }
+		for (const DrawObj& object : document_->Objects())
+		{
+			if (object.IsWithin(area)) AddToSelection(object.id);
+		}
 
-        Invalidate();
-        Changed();
-        return;
-    }
+		Invalidate();
+		Changed();
+		return;
+	}
 
-    if (drag == Drag::Resize && tool_.kind != Tool::Kind::Select && !selection_.empty()) {
-        const ObjectId id = selection_.front();
+	if (drag == Drag::Resize && tool_.kind != Tool::Kind::Select && !selection_.empty())
+	{
+		const ObjectId id = selection_.front();
 
-        // A click without a drag places a default-sized object instead.
-        if (DrawObj* object = Find(id)) {
-            const Rect fixed = object->position.Normalized();
-            if (fixed.Width() < 8 && fixed.Height() < 8)
-                object->position = CentredRect(dragOrigin_, kDefaultWidth, kDefaultHeight);
-        }
+		// A click without a drag places a default-sized object instead.
+		if (DrawObj* object = Find(id))
+		{
+			const Rect fixed = object->position.Normalized();
+			if (fixed.Width() < 8 && fixed.Height() < 8)
+				object->position = CentredRect(dragOrigin_, kDefaultWidth, kDefaultHeight);
+		}
 
-        const bool wasText = tool_.kind == Tool::Kind::Text;
-        tool_ = Tool{};
-        EndDragChange();
-        if (wasText) BeginEditing(id);
+		const bool wasText = tool_.kind == Tool::Kind::Text;
+		tool_ = Tool{};
+		EndDragChange();
+		if (wasText) BeginEditing(id);
 
-        Invalidate();
-        Changed();
-        return;
-    }
+		Invalidate();
+		Changed();
+		return;
+	}
 
-    EndDragChange();
-    if (drag != Drag::None) Changed();
+	EndDragChange();
+	if (drag != Drag::None) Changed();
 
-    OnMouseMove(point, shift, control, alt);
+	OnMouseMove(point, shift, control, alt);
 }
 
-void View::OnDoubleClick(const Point point, const bool shift, const bool control, const bool alt) {
-    // The zoom badge holds buttons: a quick second click on one is another
-    // step, not a double-click on whatever lies underneath.
-    const ZoomBadge badge = BadgeLayout();
-    if (point.x >= badge.bounds.left && point.x < badge.bounds.right &&
-        point.y >= badge.bounds.top && point.y < badge.bounds.bottom) {
-        OnLeftDown(point, shift, control, alt);
-        return;
-    }
+void View::OnDoubleClick(const Point point, const bool shift, const bool control, const bool alt)
+{
+	// The zoom badge holds buttons: a quick second click on one is another
+	// step, not a double-click on whatever lies underneath.
+	const ZoomBadge badge = BadgeLayout();
+	if (point.x >= badge.bounds.left && point.x < badge.bounds.right && point.y >= badge.bounds.top &&
+	    point.y < badge.bounds.bottom)
+	{
+		OnLeftDown(point, shift, control, alt);
+		return;
+	}
 
-    const ObjectId id = document_->ObjectAt(ToDoc(point), HitTolerance());
-    if (id == ObjectId::None) return;
+	const ObjectId id = document_->ObjectAt(ToDoc(point), HitTolerance());
+	if (id == ObjectId::None) return;
 
-    Select(id, false);
-    BeginEditing(id);
+	Select(id, false);
+	BeginEditing(id);
 }
 
-void View::BeginEditing(ObjectId id) {
-    if (!document_->Contains(id)) return;
+void View::BeginEditing(ObjectId id)
+{
+	if (!document_->Contains(id)) return;
 
-    EndEditing();
-    document_->BeginChange();
-    textChange_ = true;
+	EndEditing();
+	document_->BeginChange();
+	textChange_ = true;
 
-    editing_ = id;
-    caret_ = Find(id)->text.size();
-    caretVisible_ = true;
-    
-    Invalidate();
+	editing_ = id;
+	caret_ = Find(id)->text.size();
+	caretVisible_ = true;
+
+	Invalidate();
 }
 
-void View::EndEditing() {
-    if (editing_ == ObjectId::None) return;
+void View::EndEditing()
+{
+	if (editing_ == ObjectId::None) return;
 
-    
-    editing_ = ObjectId::None;
+	editing_ = ObjectId::None;
 
-    if (textChange_) {
-        textChange_ = false;
-        document_->CommitChange();
-    }
+	if (textChange_)
+	{
+		textChange_ = false;
+		document_->CommitChange();
+	}
 
-    Invalidate();
-    Changed();
+	Invalidate();
+	Changed();
 }
 
-void View::FinishEditing() { EndEditing(); }
-
-void View::OnChar(const char32_t character) {
-    DrawObj* object = Find(editing_);
-    if (!object) return;
-
-    if (character == L'\b') {
-        if (caret_ == 0) return;
-        const std::size_t start = PreviousCaretStop(object->text, caret_);
-        object->text.erase(start, caret_ - start);
-        caret_ = start;
-    } else if (character == L'\r' || character == L'\n' || character == L'\t') {
-        EndEditing();
-        return;
-    } else if (character >= U' ') {
-        std::wstring inserted;
-        if (character <= 0xffff) {
-            inserted.push_back(static_cast<wchar_t>(character));
-        } else {
-            inserted.push_back(static_cast<wchar_t>((character >> 10) + 0xd7c0));
-            inserted.push_back(static_cast<wchar_t>((character & 0x3ff) + 0xdc00));
-        }
-        object->text.insert(caret_, inserted);
-        caret_ += inserted.size();
-    } else {
-        return;
-    }
-
-    caretVisible_ = true;
-    Invalidate();
+void View::FinishEditing()
+{
+	EndEditing();
 }
 
-bool View::OnKeyDown(const char32_t key, const bool shift) {
-    if (DrawObj* object = Find(editing_)) {
-        if (key == platform::keys::ESCAPE) {
-            EndEditing();
-            return true;
-        }
-        if (key == platform::keys::LEFT)
-            caret_ = PreviousCaretStop(object->text, caret_);
-        else if (key == platform::keys::RIGHT)
-            caret_ = NextCaretStop(object->text, caret_);
-        else if (key == platform::keys::HOME)
-            caret_ = 0;
-        else if (key == platform::keys::END)
-            caret_ = object->text.size();
-        else if (key == platform::keys::DEL) {
-            if (caret_ < object->text.size())
-                object->text.erase(caret_, NextCaretStop(object->text, caret_) - caret_);
-        } else {
-            return false;
-        }
-        caretVisible_ = true;
-        Invalidate();
-        return true;
-    }
+void View::OnChar(const char32_t character)
+{
+	DrawObj* object = Find(editing_);
+	if (!object) return;
 
-    const long step = shift ? 1 : kMinorGrid;
-    if (key == platform::keys::ESCAPE) {
-        OnCommand(ID_CANCEL);
-        return true;
-    }
-    if (key == platform::keys::LEFT) {
-        NudgeSelection(-step, 0);
-        return true;
-    }
-    if (key == platform::keys::RIGHT) {
-        NudgeSelection(step, 0);
-        return true;
-    }
-    if (key == platform::keys::UP) {
-        NudgeSelection(0, step);
-        return true;
-    }
-    if (key == platform::keys::DOWN) {
-        NudgeSelection(0, -step);
-        return true;
-    }
-    if (key == platform::keys::F2 && selection_.size() == 1) {
-        BeginEditing(selection_.front());
-        return true;
-    }
-    return false;
+	if (character == L'\b')
+	{
+		if (caret_ == 0) return;
+		const std::size_t start = PreviousCaretStop(object->text, caret_);
+		object->text.erase(start, caret_ - start);
+		caret_ = start;
+	}
+	else if (character == L'\r' || character == L'\n' || character == L'\t')
+	{
+		EndEditing();
+		return;
+	}
+	else if (character >= U' ')
+	{
+		std::wstring inserted;
+		if (character <= 0xffff)
+		{
+			inserted.push_back(static_cast<wchar_t>(character));
+		}
+		else
+		{
+			inserted.push_back(static_cast<wchar_t>((character >> 10) + 0xd7c0));
+			inserted.push_back(static_cast<wchar_t>((character & 0x3ff) + 0xdc00));
+		}
+		object->text.insert(caret_, inserted);
+		caret_ += inserted.size();
+	}
+	else
+	{
+		return;
+	}
+
+	caretVisible_ = true;
+	Invalidate();
 }
 
-void View::OnContextMenu(const Point point) {
-    if (point.x >= 0 && point.y >= 0) {
-        const ObjectId hit = document_->ObjectAt(ToDoc(point), HitTolerance());
-        if (hit != ObjectId::None && !IsSelected(hit)) Select(hit, false);
-    }
-    if (onContextMenuRequested) onContextMenuRequested();
+bool View::OnKeyDown(const char32_t key, const bool shift)
+{
+	if (DrawObj* object = Find(editing_))
+	{
+		if (key == platform::keys::ESCAPE)
+		{
+			EndEditing();
+			return true;
+		}
+		if (key == platform::keys::LEFT) caret_ = PreviousCaretStop(object->text, caret_);
+		else if (key == platform::keys::RIGHT) caret_ = NextCaretStop(object->text, caret_);
+		else if (key == platform::keys::HOME) caret_ = 0;
+		else if (key == platform::keys::END) caret_ = object->text.size();
+		else if (key == platform::keys::DEL)
+		{
+			if (caret_ < object->text.size()) object->text.erase(caret_, NextCaretStop(object->text, caret_) - caret_);
+		}
+		else
+		{
+			return false;
+		}
+		caretVisible_ = true;
+		Invalidate();
+		return true;
+	}
+
+	const long step = shift ? 1 : kMinorGrid;
+	if (key == platform::keys::ESCAPE)
+	{
+		OnCommand(ID_CANCEL);
+		return true;
+	}
+	if (key == platform::keys::LEFT)
+	{
+		NudgeSelection(-step, 0);
+		return true;
+	}
+	if (key == platform::keys::RIGHT)
+	{
+		NudgeSelection(step, 0);
+		return true;
+	}
+	if (key == platform::keys::UP)
+	{
+		NudgeSelection(0, step);
+		return true;
+	}
+	if (key == platform::keys::DOWN)
+	{
+		NudgeSelection(0, -step);
+		return true;
+	}
+	if (key == platform::keys::F2 && selection_.size() == 1)
+	{
+		BeginEditing(selection_.front());
+		return true;
+	}
+	return false;
 }
 
-void View::OnTimer(const unsigned int id) {
-    if (id != kCaretTimer || editing_ == ObjectId::None) return;
-    caretVisible_ = !caretVisible_;
-    Invalidate();
+void View::OnContextMenu(const Point point)
+{
+	if (point.x >= 0 && point.y >= 0)
+	{
+		const ObjectId hit = document_->ObjectAt(ToDoc(point), HitTolerance());
+		if (hit != ObjectId::None && !IsSelected(hit)) Select(hit, false);
+	}
+	if (onContextMenuRequested) onContextMenuRequested();
+}
+
+void View::OnTimer(const unsigned int id)
+{
+	if (id != kCaretTimer || editing_ == ObjectId::None) return;
+	caretVisible_ = !caretVisible_;
+	Invalidate();
 }
 
 // ---------------------------------------------------------------- commands
 
-bool View::OnCommand(int id) {
-    // While a label is being typed the edit commands belong to the text.
-    if (editing_ != ObjectId::None) {
-        switch (id) {
-            case ID_EDIT_CLEAR: OnKeyDown(platform::keys::DEL, false); return true;
-            case ID_EDIT_CUT:
-            case ID_EDIT_PASTE:
-            case ID_EDIT_DUPLICATE:
-            case ID_EDIT_SELECT_ALL: return true;
-            default: break;
-        }
-    }
+bool View::OnCommand(int id)
+{
+	// While a label is being typed the edit commands belong to the text.
+	if (editing_ != ObjectId::None)
+	{
+		switch (id)
+		{
+		case ID_EDIT_CLEAR: OnKeyDown(platform::keys::DEL, false); return true;
+		case ID_EDIT_CUT:
+		case ID_EDIT_PASTE:
+		case ID_EDIT_DUPLICATE:
+		case ID_EDIT_SELECT_ALL: return true;
+		default: break;
+		}
+	}
 
-    switch (id) {
-        case ID_EDIT_UNDO:
-        case ID_EDIT_REDO: {
-            EndEditing();
-            const bool changed = id == ID_EDIT_UNDO ? document_->Undo() : document_->Redo();
-            if (changed) {
-                // Ids outlive the snapshot swap, so the selection survives.
-                std::erase_if(selection_,
-                              [this](ObjectId each) { return !document_->Contains(each); });
-                Invalidate();
-                Changed();
-            }
-            return true;
-        }
+	switch (id)
+	{
+	case ID_EDIT_UNDO:
+	case ID_EDIT_REDO:
+	{
+		EndEditing();
+		const bool changed = id == ID_EDIT_UNDO ? document_->Undo() : document_->Redo();
+		if (changed)
+		{
+			// Ids outlive the snapshot swap, so the selection survives.
+			std::erase_if(selection_, [this](ObjectId each) { return !document_->Contains(each); });
+			Invalidate();
+			Changed();
+		}
+		return true;
+	}
 
-        case ID_EDIT_SELECT_ALL: SelectAll(); return true;
-        case ID_EDIT_CLEAR: DeleteSelection(); return true;
-        case ID_EDIT_DUPLICATE: DuplicateSelection(); return true;
-        case ID_EDIT_COPY: Copy(); return true;
-        case ID_EDIT_CUT:
-            Copy();
-            DeleteSelection();
-            return true;
-        case ID_EDIT_PASTE: Paste(); return true;
+	case ID_EDIT_SELECT_ALL: SelectAll(); return true;
+	case ID_EDIT_CLEAR: DeleteSelection(); return true;
+	case ID_EDIT_DUPLICATE: DuplicateSelection(); return true;
+	case ID_EDIT_COPY: Copy(); return true;
+	case ID_EDIT_CUT:
+		Copy();
+		DeleteSelection();
+		return true;
+	case ID_EDIT_PASTE: Paste(); return true;
 
-        case ID_EDIT_TEXT:
-            if (selection_.size() == 1) BeginEditing(selection_.front());
-            return true;
+	case ID_EDIT_TEXT:
+		if (selection_.size() == 1) BeginEditing(selection_.front());
+		return true;
 
-        case ID_VIEW_GRID:
-            showGrid_ = !showGrid_;
-            Invalidate();
-            return true;
+	case ID_VIEW_GRID:
+		showGrid_ = !showGrid_;
+		Invalidate();
+		return true;
 
-        case ID_VIEW_SNAP:
-            snap_ = !snap_;
-            return true;
+	case ID_VIEW_SNAP: snap_ = !snap_; return true;
 
-        case ID_VIEW_ZOOM_IN: ZoomBy(kZoomStep); return true;
-        case ID_VIEW_ZOOM_OUT: ZoomBy(1.0f / kZoomStep); return true;
-        case ID_VIEW_ZOOM_FIT: ZoomToFit(); return true;
-        case ID_VIEW_ZOOM_ACTUAL: {
-            const Rect client{0, 0, viewport_.cx, viewport_.cy};
-            SetZoom(1.0f, Point{client.right / 2, client.bottom / 2});
-            return true;
-        }
+	case ID_VIEW_ZOOM_IN: ZoomBy(kZoomStep); return true;
+	case ID_VIEW_ZOOM_OUT: ZoomBy(1.0f / kZoomStep); return true;
+	case ID_VIEW_ZOOM_FIT: ZoomToFit(); return true;
+	case ID_VIEW_ZOOM_ACTUAL:
+	{
+		const Rect client{0, 0, viewport_.cx, viewport_.cy};
+		SetZoom(1.0f, Point{client.right / 2, client.bottom / 2});
+		return true;
+	}
 
-        case ID_VIEW_PAPER_COLOUR: {
-            if (onPickColour) {
-                if (auto colour = onPickColour(document_->PaperColour())) {
-                    document_->BeginChange();
-                    document_->SetPaperColour(*colour);
-                    document_->CommitChange();
-                    Invalidate();
-                    Changed();
-                }
-            }
-            return true;
-        }
+	case ID_VIEW_PAPER_COLOUR:
+	{
+		if (onPickColour)
+		{
+			if (auto colour = onPickColour(document_->PaperColour()))
+			{
+				document_->BeginChange();
+				document_->SetPaperColour(*colour);
+				document_->CommitChange();
+				Invalidate();
+				Changed();
+			}
+		}
+		return true;
+	}
 
-        case ID_OBJECT_ALIGN_LEFT:
-        case ID_OBJECT_ALIGN_CENTRE:
-        case ID_OBJECT_ALIGN_RIGHT:
-        case ID_OBJECT_ALIGN_TOP:
-        case ID_OBJECT_ALIGN_MIDDLE:
-        case ID_OBJECT_ALIGN_BOTTOM: AlignSelection(id); return true;
+	case ID_OBJECT_ALIGN_LEFT:
+	case ID_OBJECT_ALIGN_CENTRE:
+	case ID_OBJECT_ALIGN_RIGHT:
+	case ID_OBJECT_ALIGN_TOP:
+	case ID_OBJECT_ALIGN_MIDDLE:
+	case ID_OBJECT_ALIGN_BOTTOM: AlignSelection(id); return true;
 
-        case ID_OBJECT_FRONT:
-        case ID_OBJECT_BACK:
-        case ID_OBJECT_FORWARD:
-        case ID_OBJECT_BACKWARD: {
-            if (selection_.size() != 1) return true;
-            const ObjectId target = selection_.front();
+	case ID_OBJECT_FRONT:
+	case ID_OBJECT_BACK:
+	case ID_OBJECT_FORWARD:
+	case ID_OBJECT_BACKWARD:
+	{
+		if (selection_.size() != 1) return true;
+		const ObjectId target = selection_.front();
 
-            document_->BeginChange();
-            if (id == ID_OBJECT_FRONT)
-                document_->MoveToFront(target);
-            else if (id == ID_OBJECT_BACK)
-                document_->MoveToBack(target);
-            else if (id == ID_OBJECT_FORWARD)
-                document_->MoveForward(target);
-            else
-                document_->MoveBackward(target);
-            document_->CommitChange();
+		document_->BeginChange();
+		if (id == ID_OBJECT_FRONT) document_->MoveToFront(target);
+		else if (id == ID_OBJECT_BACK) document_->MoveToBack(target);
+		else if (id == ID_OBJECT_FORWARD) document_->MoveForward(target);
+		else document_->MoveBackward(target);
+		document_->CommitChange();
 
-            Invalidate();
-            Changed();
-            return true;
-        }
+		Invalidate();
+		Changed();
+		return true;
+	}
 
-        case ID_CANCEL:
-            EndEditing();
-            if (captured_) {
-                captured_ = false;
-                if (onCapture) onCapture(false);
-            }
-            drag_ = Drag::None;
-            EndDragChange();
-            bandActive_ = false;
-            tool_ = Tool{};
-            Invalidate();
-            Changed();
-            return true;
+	case ID_CANCEL:
+		EndEditing();
+		if (captured_)
+		{
+			captured_ = false;
+			if (onCapture) onCapture(false);
+		}
+		drag_ = Drag::None;
+		EndDragChange();
+		bandActive_ = false;
+		tool_ = Tool{};
+		Invalidate();
+		Changed();
+		return true;
 
-        default: break;
-    }
+	default: break;
+	}
 
-    if (id >= ID_PAGE_FIRST && id <= ID_PAGE_LAST) {
-        document_->BeginChange();
-        document_->SetPageSize(kPageSizes[static_cast<std::size_t>(id - ID_PAGE_FIRST)]);
-        document_->CommitChange();
-        UpdateScrollBars();
-        Invalidate();
-        Changed();
-        return true;
-    }
+	if (id >= ID_PAGE_FIRST && id <= ID_PAGE_LAST)
+	{
+		document_->BeginChange();
+		document_->SetPageSize(kPageSizes[static_cast<std::size_t>(id - ID_PAGE_FIRST)]);
+		document_->CommitChange();
+		UpdateScrollBars();
+		Invalidate();
+		Changed();
+		return true;
+	}
 
-    return false;
+	return false;
 }
 
-void View::QueryCommandState(int id, bool& enabled, bool& checked) const {
-    enabled = true;
-    checked = false;
+void View::QueryCommandState(int id, bool& enabled, bool& checked) const
+{
+	enabled = true;
+	checked = false;
 
-    if (id >= ID_PAGE_FIRST && id <= ID_PAGE_LAST) {
-        checked = document_->PageSize() ==
-                  kPageSizes[static_cast<std::size_t>(id - ID_PAGE_FIRST)];
-        return;
-    }
+	if (id >= ID_PAGE_FIRST && id <= ID_PAGE_LAST)
+	{
+		checked = document_->PageSize() == kPageSizes[static_cast<std::size_t>(id - ID_PAGE_FIRST)];
+		return;
+	}
 
-    const bool editing = editing_ != ObjectId::None;
+	const bool editing = editing_ != ObjectId::None;
 
-    switch (id) {
-        // Invoking either ends the label first, so an open edit still counts.
-        case ID_EDIT_UNDO: enabled = document_->CanUndo() || editing; break;
-        case ID_EDIT_REDO: enabled = document_->CanRedo() || editing; break;
+	switch (id)
+	{
+	// Invoking either ends the label first, so an open edit still counts.
+	case ID_EDIT_UNDO: enabled = document_->CanUndo() || editing; break;
+	case ID_EDIT_REDO: enabled = document_->CanRedo() || editing; break;
 
-        case ID_EDIT_CLEAR:
-        case ID_EDIT_COPY:
-        case ID_EDIT_CUT:
-        case ID_EDIT_DUPLICATE: enabled = !selection_.empty(); break;
+	case ID_EDIT_CLEAR:
+	case ID_EDIT_COPY:
+	case ID_EDIT_CUT:
+	case ID_EDIT_DUPLICATE: enabled = !selection_.empty(); break;
 
-        case ID_EDIT_TEXT:
-        case ID_OBJECT_FRONT:
-        case ID_OBJECT_BACK:
-        case ID_OBJECT_FORWARD:
-        case ID_OBJECT_BACKWARD: enabled = selection_.size() == 1; break;
+	case ID_EDIT_TEXT:
+	case ID_OBJECT_FRONT:
+	case ID_OBJECT_BACK:
+	case ID_OBJECT_FORWARD:
+	case ID_OBJECT_BACKWARD: enabled = selection_.size() == 1; break;
 
-        case ID_OBJECT_ALIGN_LEFT:
-        case ID_OBJECT_ALIGN_CENTRE:
-        case ID_OBJECT_ALIGN_RIGHT:
-        case ID_OBJECT_ALIGN_TOP:
-        case ID_OBJECT_ALIGN_MIDDLE:
-        case ID_OBJECT_ALIGN_BOTTOM: enabled = selection_.size() > 1; break;
+	case ID_OBJECT_ALIGN_LEFT:
+	case ID_OBJECT_ALIGN_CENTRE:
+	case ID_OBJECT_ALIGN_RIGHT:
+	case ID_OBJECT_ALIGN_TOP:
+	case ID_OBJECT_ALIGN_MIDDLE:
+	case ID_OBJECT_ALIGN_BOTTOM: enabled = selection_.size() > 1; break;
 
-        case ID_EDIT_PASTE: enabled = ClipboardHasObjects(); break;
-        case ID_EDIT_SELECT_ALL: enabled = !document_->Objects().empty(); break;
-        case ID_VIEW_GRID: checked = showGrid_; break;
-        case ID_VIEW_SNAP: checked = snap_; break;
-        default: break;
-    }
+	case ID_EDIT_PASTE: enabled = ClipboardHasObjects(); break;
+	case ID_EDIT_SELECT_ALL: enabled = !document_->Objects().empty(); break;
+	case ID_VIEW_GRID: checked = showGrid_; break;
+	case ID_VIEW_SNAP: checked = snap_; break;
+	default: break;
+	}
 }
 
 // ------------------------------------------------------------ export/print
 
-bool View::ExportPng(const std::filesystem::path& path) const {
-    Canvas canvas;
-    if (!RenderDocumentToCanvas(*document_, canvas, kExportDpi)) return false;
+bool View::ExportPng(const std::filesystem::path& path) const
+{
+	const core::surface_ptr image = RenderDocument(*document_, kExportDpi);
+	if (!image) return false;
 
-    try {
-        WritePng(canvas, path);
-    } catch (const std::exception&) {
-        return false;
-    }
-    return true;
+	try
+	{
+		WritePng(image, path);
+	}
+	catch (const std::exception&)
+	{
+		return false;
+	}
+	return true;
 }

@@ -2,6 +2,13 @@
 # line ending convention. Marking them as text lets Git's whitespace checker
 # treat the carriage return as an end-of-line marker instead of trailing data.
 * text eol=crlf
+# Pictures, icons and cursors are binary: as text, the CR LF and LF bytes in them would be rewritten.
+*.png -text
+*.bmp -text
+*.ico -text
+*.cur -text
 # dd's vendored runtime, byte for byte; GitHub should not count it as this project's code
 /dd.ps1 linguist-vendored
 /.dd/** linguist-vendored
+/tools/generate_icon.py text eol=lf
+/tools/iconlib.py -text linguist-vendored

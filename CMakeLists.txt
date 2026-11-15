@@ -30,8 +30,8 @@ set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
 set(BUILD_SHARED_LIBS OFF)
 set(BUILD_TESTING OFF)
 
-set(FAST_DRAW_LIBDESKTOP_REVISION 04109ee82a500db38d439fa281bbc3f43124adfe)
-set(FAST_DRAW_LIBFILES_REVISION 27de9d9fb67d7be7fcf9ff8a9f87dad5a91ae3eb)
+set(FAST_DRAW_LIBDESKTOP_REVISION d172a12c6e3df0831a641133b96d073559a99db5)
+set(FAST_DRAW_LIBFILES_REVISION 75e5e1dd703f095e08da8a1293aa59c9e3c4f92b)
 
 if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_LIBDESKTOP
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libdesktop/CMakeLists.txt")
@@ -73,8 +73,6 @@ FetchContent_MakeAvailable(libfiles)
 # link against the same code the application uses.
 # ---------------------------------------------------------------------------
 add_library(fast-draw-lib STATIC
-    src/canvas.cpp
-    src/canvas.h
     src/document.cpp
     src/document.h
     src/draw_obj.cpp
@@ -86,12 +84,12 @@ add_library(fast-draw-lib STATIC
     src/json.h
     src/main_window.cpp
     src/main_window.h
+    src/path.cpp
+    src/path.h
     src/print_backend.cpp
     src/print_backend.h
     src/png_export.cpp
     src/png_export.h
-    src/render.cpp
-    src/render.h
     src/resource.h
     src/shape_palette.cpp
     src/shape_palette.h

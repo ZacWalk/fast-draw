@@ -3,62 +3,52 @@
 
 #pragma once
 
+#include "geometry.h"
 #include "json.h"
-#include "render.h"
 
-#include <array>
-#include <span>
 #include <string>
 #include <string_view>
 
-enum class DashStyle : int {
-    Solid,
-    Dash,
-    Dot,
-    DashDot,
+// Which way a gradient fill runs from its first colour to its second.
+enum class GradientDirection : int
+{
+	Down,
+	Right,
 };
 
-inline constexpr int kDashStyleCount = 4;
+inline constexpr int kGradientDirectionCount = 2;
 
-struct Style {
-    bool hasFill = true;
-    Color fill = Rgb(0xDC, 0xE9, 0xFB);
-    bool gradient = false;
-    Color fillEnd = Rgb(0x8F, 0xB8, 0xE8);
-    GradientDirection gradientDirection = GradientDirection::Down;
+struct Style
+{
+	bool hasFill = true;
+	Color fill = Rgb(0xDC, 0xE9, 0xFB);
+	bool gradient = false;
+	Color fillEnd = Rgb(0x8F, 0xB8, 0xE8);
+	GradientDirection gradientDirection = GradientDirection::Down;
 
-    bool hasLine = true;
-    Color line = Rgb(0x1F, 0x4B, 0x7A);
-    int lineWidth = 2;  // 0.01 inch units, same as document coordinates
-    DashStyle dash = DashStyle::Solid;
-    bool roundJoins = true;
+	bool hasLine = true;
+	Color line = Rgb(0x1F, 0x4B, 0x7A);
+	int lineWidth = 2; // 0.01 inch units, same as document coordinates
 
-    bool startArrow = false;
-    bool endArrow = false;
+	bool startArrow = false;
+	bool endArrow = false;
 
-    Color textColour = Rgb(0x1B, 0x1B, 0x1F);
-    int fontSize = 11;  // points
-    bool bold = false;
-    bool italic = false;
+	Color textColour = Rgb(0x1B, 0x1B, 0x1F);
+	int fontSize = 11; // points
 
-    friend bool operator==(const Style&, const Style&) = default;
+	friend bool operator==(const Style&, const Style&) = default;
 };
 
 // Colours are stored in documents as "#rrggbb".
 std::string ColourToHex(Color colour);
 Color ColourFromHex(std::string_view text, Color fallback);
 
+// Reading ignores keys this version does not know - older documents also hold
+// dash styles, round joins, bold and italic - and a gradient direction other
+// than down or right reads as the fallback's.
 Json StyleToJson(const Style& style);
 Style StyleFromJson(const Json& json, const Style& fallback = {});
 
 // Copies across only the fields that differ between `before` and `after`, so
 // changing one sidebar control leaves the rest of a mixed selection alone.
 void ApplyStyleDelta(const Style& before, const Style& after, Style& target);
-
-// Fills `storage` with the on/off run lengths for `style` at the given device
-// stroke width and returns the span to hand to StrokeStyle. Solid yields empty.
-std::span<const float> DashPattern(DashStyle style, float strokeWidth,
-                                   std::array<float, 4>& storage);
-
-Paint FillPaint(const Style& style, const RectF& bounds);
-Paint LinePaint(const Style& style);

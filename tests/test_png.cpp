@@ -1,8 +1,6 @@
 #include "test_framework.h"
 
-#include "canvas.h"
 #include "document.h"
-#include "ui.h"
 #include "view.h"
 #include "file_io.h"
 #include "png_export.h"
@@ -13,237 +11,242 @@
 #include <libfiles/encode.h>
 #include <png.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <vector>
 
-namespace {
+namespace
+{
 
-struct DecodedImage {
-    int width = 0;
-    int height = 0;
-    std::vector<std::uint32_t> pixels;  // 0xAARRGGBB
+	struct DecodedImage
+	{
+		int width = 0;
+		int height = 0;
+		std::vector<std::uint32_t> pixels; // 0xAARRGGBB
 
-    std::uint32_t At(int x, int y) const {
-        return pixels[static_cast<std::size_t>(y) * width + x];
-    }
-};
+		std::uint32_t At(int x, int y) const { return pixels[static_cast<std::size_t>(y) * width + x]; }
+	};
 
-// A minimal reader so the tests verify what was actually encoded. The
-// libpng target here is the copy built and owned by libfiles; fast-draw's
-// production code only reaches it through libfiles::encode_png.
-DecodedImage DecodePng(const std::filesystem::path& path) {
-   const std::string encoded = ReadFileText(path);
-   png_image png{};
-   png.version = PNG_IMAGE_VERSION;
-   if (!::png_image_begin_read_from_memory(&png, encoded.data(), encoded.size()))
-       throw FileError("libpng failed to read the image");
-   png.format = PNG_FORMAT_RGBA;
+	// A minimal reader so the tests verify what was actually encoded. The
+	// libpng target here is the copy built and owned by libfiles; fast-draw's
+	// production code only reaches it through libfiles::encode_png.
+	DecodedImage DecodePng(const std::filesystem::path& path)
+	{
+		const std::string encoded = ReadFileText(path);
+		png_image png{};
+		png.version = PNG_IMAGE_VERSION;
+		if (!::png_image_begin_read_from_memory(&png, encoded.data(), encoded.size()))
+			throw FileError("libpng failed to read the image");
+		png.format = PNG_FORMAT_RGBA;
 
-   std::vector<png_byte> rgba(PNG_IMAGE_SIZE(png));
-   if (!::png_image_finish_read(&png, nullptr, rgba.data(), 0, nullptr)) {
-       ::png_image_free(&png);
-       throw FileError("libpng failed to decode the image");
-   }
-   DecodedImage result;
-   result.width = static_cast<int>(png.width);
-   result.height = static_cast<int>(png.height);
-   result.pixels.resize(static_cast<std::size_t>(result.width) * result.height);
-   for (std::size_t i = 0; i < result.pixels.size(); ++i) {
-       const auto* source = rgba.data() + i * 4;
-       result.pixels[i] = (static_cast<std::uint32_t>(source[3]) << 24) |
-                          (static_cast<std::uint32_t>(source[0]) << 16) |
-                          (static_cast<std::uint32_t>(source[1]) << 8) |
-                          static_cast<std::uint32_t>(source[2]);
-   }
-   return result;
+		std::vector<png_byte> rgba(PNG_IMAGE_SIZE(png));
+		if (!::png_image_finish_read(&png, nullptr, rgba.data(), 0, nullptr))
+		{
+			::png_image_free(&png);
+			throw FileError("libpng failed to decode the image");
+		}
+		DecodedImage result;
+		result.width = static_cast<int>(png.width);
+		result.height = static_cast<int>(png.height);
+		result.pixels.resize(static_cast<std::size_t>(result.width) * result.height);
+		for (std::size_t i = 0; i < result.pixels.size(); ++i)
+		{
+			const auto* source = rgba.data() + i * 4;
+			result.pixels[i] = (static_cast<std::uint32_t>(source[3]) << 24) |
+			                   (static_cast<std::uint32_t>(source[0]) << 16) |
+			                   (static_cast<std::uint32_t>(source[1]) << 8) | static_cast<std::uint32_t>(source[2]);
+		}
+		return result;
+	}
+
+	std::filesystem::path TempImage(const char* name)
+	{
+		return std::filesystem::temp_directory_path() / name;
+	}
+
+	// A BGRA surface of one colour, 0xAARRGGBB.
+	core::surface_ptr Surface(int width, int height, std::uint32_t colour)
+	{
+		auto surface = std::make_shared<core::surface>();
+		surface->alloc(width, height, core::texture_format::ARGB, core::orientation::top_left);
+		for (int y = 0; y < height; ++y)
+			for (int x = 0; x < width; ++x) surface->set_pixel(x, y, colour);
+		return surface;
+	}
+
+	// Each channel of two 0xAARRGGBB colours within `tolerance` of the other.
+	bool Near(std::uint32_t actual, std::uint32_t expected, int tolerance)
+	{
+		for (int shift = 0; shift < 32; shift += 8)
+		{
+			const int a = static_cast<int>((actual >> shift) & 0xFF);
+			const int b = static_cast<int>((expected >> shift) & 0xFF);
+			if (std::abs(a - b) > tolerance) return false;
+		}
+		return true;
+	}
+
+} // namespace
+
+TEST(PngRoundTripPreservesPixels)
+{
+	const auto surface = Surface(8, 4, 0xFF102030);
+	surface->set_pixel(0, 0, 0xFFFF0000); // red
+	surface->set_pixel(2, 1, 0xFF00FF00); // green
+	surface->set_pixel(7, 3, 0xFF0000FF); // blue
+
+	const auto path = TempImage("fast-draw-test.png");
+	WritePng(surface, path);
+
+	// The file must start with the PNG signature.
+	const std::string bytes = ReadFileText(path);
+	CHECK(bytes.size() > 8);
+	CHECK_EQ(static_cast<unsigned char>(bytes[0]), 0x89u);
+	CHECK_EQ(bytes.substr(1, 3), std::string("PNG"));
+
+	const DecodedImage image = DecodePng(path);
+	CHECK_EQ(image.width, 8);
+	CHECK_EQ(image.height, 4);
+	CHECK_EQ(image.At(0, 0), 0xFFFF0000u);
+	CHECK_EQ(image.At(2, 1), 0xFF00FF00u);
+	CHECK_EQ(image.At(7, 3), 0xFF0000FFu);
+	CHECK_EQ(image.At(4, 2), 0xFF102030u);
+
+	std::filesystem::remove(path);
 }
 
-std::filesystem::path TempImage(const char* name) {
-    return std::filesystem::temp_directory_path() / name;
+TEST(PngRoundTripPreservesAlpha)
+{
+	const auto surface = Surface(4, 1, 0x00000000);
+	surface->set_pixel(0, 0, 0x80FF8040);
+
+	const auto path = TempImage("fast-draw-test-alpha.png");
+	WritePng(surface, path);
+
+	const DecodedImage image = DecodePng(path);
+	CHECK_EQ(image.At(0, 0), 0x80FF8040u);
+	CHECK_EQ(image.At(1, 0), 0x00000000u);
+
+	std::filesystem::remove(path);
 }
 
-}  // namespace
+TEST(LibfilesPngBoundaryAcceptsSurfaceBgra)
+{
+	const auto surface = Surface(2, 1, 0xFF102030);
+	surface->set_pixel(0, 0, 0x80402010);
 
-TEST(CanvasStartsInvalidAndResizes) {
-    Canvas canvas;
-    CHECK(!canvas.IsValid());
+	libfiles::image_view image;
+	image.pixels = surface->pixels();
+	image.stride = surface->stride();
+	image.width = 2;
+	image.height = 1;
+	image.format = libfiles::pixel_format::bgra8;
 
-    CHECK(canvas.Resize(16, 8));
-    CHECK(canvas.IsValid());
-    CHECK_EQ(canvas.Width(), 16);
-    CHECK_EQ(canvas.Height(), 8);
-
-    // A zero size releases the surface rather than leaving a stale one.
-    CHECK(!canvas.Resize(0, 10));
-    CHECK(!canvas.IsValid());
+	const libfiles::encoded encoded = libfiles::encode_png(image, 1, {});
+	CHECK(encoded.data.size() > 8);
+	CHECK_EQ(encoded.data[0], static_cast<std::uint8_t>(0x89));
+	CHECK_EQ(encoded.data[1], static_cast<std::uint8_t>('P'));
+	CHECK_EQ(encoded.data[2], static_cast<std::uint8_t>('N'));
+	CHECK_EQ(encoded.data[3], static_cast<std::uint8_t>('G'));
 }
 
-TEST(CanvasClearFillsEveryPixel) {
-    Canvas canvas;
-    CHECK(canvas.Resize(37, 5));  // deliberately not a multiple of the SIMD width
-    canvas.Clear(0xFF204060);
+TEST(SharedPixelSurfaceDrawContextWritesPixels)
+{
+	const auto surface = Surface(20, 20, 0xFF000000);
 
-    bool allMatch = true;
-    for (int y = 0; y < canvas.Height(); ++y) {
-        for (int x = 0; x < canvas.Width(); ++x) {
-            if (canvas.Row(y)[x] != 0xFF204060) allMatch = false;
-        }
-    }
-    CHECK(allMatch);
+	{
+		auto draw = render::create_surface_context(surface);
+		CHECK(draw != nullptr);
+		draw->draw_rect({0, 0, 20, 20}, core::color(core::rgba(255, 255, 255, 255)));
+		(void)draw->render();
+	}
+
+	CHECK_EQ(surface->get_pixel(10, 10) & 0x00FFFFFFu, 0x00FFFFFFu);
 }
 
-TEST(CanvasSetOpaqueForcesAlpha) {
-    Canvas canvas;
-    CHECK(canvas.Resize(11, 3));
-    canvas.Clear(0x00123456);
-    canvas.SetOpaque();
+TEST(AnExportedPageHoldsTheDrawing)
+{
+	Document document;
+	document.SetPaperColour(Rgb(0xFF, 0xFF, 0xFF));
 
-    bool allOpaque = true;
-    for (int y = 0; y < canvas.Height(); ++y) {
-        for (int x = 0; x < canvas.Width(); ++x) {
-            if (canvas.Row(y)[x] != 0xFF123456) allOpaque = false;
-        }
-    }
-    CHECK(allOpaque);
+	Style solid;
+	solid.fill = Rgb(0xC0, 0x20, 0x20);
+	solid.hasLine = false;
+	DrawObj left(ShapeKind::Rectangle, Rect(-500, 300, -100, -300), solid);
+	left.text = L"label";
+	document.Add(std::move(left));
+
+	Style gradient;
+	gradient.fill = Rgb(0x00, 0x00, 0xFF);
+	gradient.fillEnd = Rgb(0x00, 0xFF, 0x00);
+	gradient.gradient = true;
+	gradient.hasLine = false;
+	document.Add(DrawObj(ShapeKind::Rectangle, Rect(100, 300, 500, -300), gradient));
+
+	Style framed;
+	framed.hasFill = false;
+	framed.line = Rgb(0x10, 0x10, 0x10);
+	framed.lineWidth = 8;
+	document.Add(DrawObj(ShapeKind::Rectangle, Rect(-50, 50, 50, -50), framed));
+
+	Style line;
+	line.hasFill = false;
+	line.line = Rgb(0x20, 0x40, 0x80);
+	line.lineWidth = 4;
+	document.Add(DrawObj(ShapeKind::Line, Rect(-500, -380, 500, -380), line));
+
+	// At 100 dpi a document unit is a pixel, and the page centre is (550, 425).
+	const core::surface_ptr page = RenderDocument(document, 100);
+	CHECK(page != nullptr);
+	if (!page) return;
+	CHECK_EQ(page->width(), 1100u);
+	CHECK_EQ(page->height(), 850u);
+
+	const auto path = TempImage("fast-draw-test-export.png");
+	WritePng(page, path);
+	const DecodedImage image = DecodePng(path);
+	std::filesystem::remove(path);
+
+	CHECK_EQ(image.At(5, 5), 0xFFFFFFFFu);           // paper
+	CHECK(Near(image.At(250, 200), 0xFFC02020u, 1)); // the solid fill
+	CHECK(Near(image.At(850, 126), 0xFF0000FFu, 3)); // the gradient's top...
+	CHECK(Near(image.At(850, 425), 0xFF00807Fu, 3)); // ...middle...
+	CHECK(Near(image.At(850, 724), 0xFF00FF00u, 3)); // ...and bottom
+	CHECK(Near(image.At(500, 425), 0xFF101010u, 1)); // the frame's border
+	CHECK_EQ(image.At(550, 425), 0xFFFFFFFFu);       // and its unfilled middle
+	CHECK(Near(image.At(300, 805), 0xFF204080u, 1)); // the line, four pixels wide
+	CHECK_EQ(image.At(300, 809), 0xFFFFFFFFu);
 }
 
-TEST(PngRoundTripPreservesPixels) {
-    Canvas canvas;
-    CHECK(canvas.Resize(8, 4));
-    canvas.Clear(0xFF102030);
-
-    canvas.Row(0)[0] = 0xFFFF0000;  // red
-    canvas.Row(1)[2] = 0xFF00FF00;  // green
-    canvas.Row(3)[7] = 0xFF0000FF;  // blue
-
-    const auto path = TempImage("fast-draw-test.png");
-    WritePng(canvas, path);
-
-    // The file must start with the PNG signature.
-    const std::string bytes = ReadFileText(path);
-    CHECK(bytes.size() > 8);
-    CHECK_EQ(static_cast<unsigned char>(bytes[0]), 0x89u);
-    CHECK_EQ(bytes.substr(1, 3), std::string("PNG"));
-
-    const DecodedImage image = DecodePng(path);
-    CHECK_EQ(image.width, 8);
-    CHECK_EQ(image.height, 4);
-    CHECK_EQ(image.At(0, 0), 0xFFFF0000u);
-    CHECK_EQ(image.At(2, 1), 0xFF00FF00u);
-    CHECK_EQ(image.At(7, 3), 0xFF0000FFu);
-    CHECK_EQ(image.At(4, 2), 0xFF102030u);
-
-    std::filesystem::remove(path);
+TEST(ExportingNothingFails)
+{
+	CHECK_THROWS(WritePng(nullptr, TempImage("fast-draw-test-empty.png")), FileError);
+	CHECK_THROWS(WritePng(std::make_shared<core::surface>(), TempImage("fast-draw-test-empty.png")), FileError);
 }
 
-TEST(PngRoundTripPreservesAlpha) {
-    Canvas canvas;
-    CHECK(canvas.Resize(4, 1));
-    canvas.Clear(0x00000000);
-    canvas.Row(0)[0] = 0x80FF8040;
-
-    const auto path = TempImage("fast-draw-test-alpha.png");
-    WritePng(canvas, path);
-
-    const DecodedImage image = DecodePng(path);
-    CHECK_EQ(image.At(0, 0), 0x80FF8040u);
-    CHECK_EQ(image.At(1, 0), 0x00000000u);
-
-    std::filesystem::remove(path);
+TEST(ExportingToAnUnavailableFileFails)
+{
+	const auto surface = Surface(2, 2, 0xFF000000);
+	const auto path = std::filesystem::temp_directory_path() / "fast-draw-directory-that-does-not-exist" / "image.png";
+	CHECK_THROWS(WritePng(surface, path), FileError);
 }
 
-TEST(LibfilesPngBoundaryAcceptsCanvasBgra) {
-    Canvas canvas;
-    CHECK(canvas.Resize(2, 1));
-    canvas.Row(0)[0] = 0x80402010;
-    canvas.Row(0)[1] = 0xFF102030;
+TEST(AtomicPngWriteReportsSharedWriterFailures)
+{
+	const auto surface = Surface(2, 2, 0xFF000000);
+	const auto path = TempImage("fast-draw-atomic-failure.png");
+	const platform::atomic_file_test_failure failures[] = {
+		platform::atomic_file_test_failure::open,
+		platform::atomic_file_test_failure::write,
+		platform::atomic_file_test_failure::flush,
+		platform::atomic_file_test_failure::commit,
+	};
 
-    libfiles::image_view image;
-    image.pixels = reinterpret_cast<const std::uint8_t*>(canvas.Pixels());
-    image.stride = sizeof(std::uint32_t) * 2;
-    image.width = 2;
-    image.height = 1;
-    image.format = libfiles::pixel_format::bgra8;
-
-    const libfiles::encoded encoded = libfiles::encode_png(image, 1, {});
-    CHECK(encoded.data.size() > 8);
-    CHECK_EQ(encoded.data[0], static_cast<std::uint8_t>(0x89));
-    CHECK_EQ(encoded.data[1], static_cast<std::uint8_t>('P'));
-    CHECK_EQ(encoded.data[2], static_cast<std::uint8_t>('N'));
-    CHECK_EQ(encoded.data[3], static_cast<std::uint8_t>('G'));
-}
-
-TEST(SharedPixelSurfaceDrawContextWritesPixels) {
-    Canvas canvas;
-    CHECK(canvas.Resize(20, 20));
-    canvas.Clear(0xFF000000);
-
-    {
-        auto draw = render::create_surface_context(canvas.Surface());
-        CHECK(draw != nullptr);
-        draw->draw_rect({0, 0, 20, 20}, core::color(core::rgba(255, 255, 255, 255)));
-        (void)draw->render();
-    }
-
-    CHECK_EQ(canvas.Row(10)[10] & 0x00FFFFFFu, 0x00FFFFFFu);
-}
-
-
-TEST(TextRenderingPreservesTheExistingSurface) {
-    Canvas canvas;
-    CHECK(canvas.Resize(240, 80));
-    canvas.Clear(0xFF112233);
-    const std::uint32_t marker = 0xFFABCDEF;
-    canvas.Row(79)[239] = marker;
-
-    ui::Text(canvas, {4, 4, 90, 36}, L"label", ui::kText, ui::TextAlign::left,
-             ui::Font(1.0));
-    CHECK_EQ(canvas.Row(79)[239], marker);
-
-    Document document;
-    DrawObj object(ShapeKind::Rectangle, {-100, 100, 100, -100}, Style{});
-    object.text = L"label";
-    document.Add(std::move(object));
-
-    Canvas rendered;
-    CHECK(RenderDocumentToCanvas(document, rendered, 100));
-    CHECK_EQ(rendered.Row(0)[0], ArgbFromColor(document.PaperColour()));
-}
-
-TEST(ArgbFromColorPreservesChannels) {
-    CHECK_EQ(ArgbFromColor(Rgb(0x12, 0x34, 0x56)), 0xFF123456u);
-    CHECK_EQ(ArgbFromColor(Rgb(255, 0, 0)), 0xFFFF0000u);
-    CHECK_EQ(ArgbFromColor(Rgb(0, 0, 255), 0x80), 0x800000FFu);
-}
-
-TEST(ExportingAnEmptyCanvasFails) {
-    Canvas canvas;
-    CHECK_THROWS(WritePng(canvas, TempImage("fast-draw-test-empty.png")), FileError);
-}
-
-TEST(ExportingToAnUnavailableFileFails) {
-    Canvas canvas;
-    CHECK(canvas.Resize(2, 2));
-    const auto path = std::filesystem::temp_directory_path() /
-                      "fast-draw-directory-that-does-not-exist" / "image.png";
-    CHECK_THROWS(WritePng(canvas, path), FileError);
-}
-
-TEST(AtomicPngWriteReportsSharedWriterFailures) {
-    Canvas canvas;
-    CHECK(canvas.Resize(2, 2));
-    const auto path = TempImage("fast-draw-atomic-failure.png");
-    const platform::atomic_file_test_failure failures[] = {
-        platform::atomic_file_test_failure::open,
-        platform::atomic_file_test_failure::write,
-        platform::atomic_file_test_failure::flush,
-        platform::atomic_file_test_failure::commit,
-    };
-
-    for (const auto failure : failures) {
-        platform::test_set_atomic_file_failure(failure);
-        CHECK_THROWS(WritePng(canvas, path), FileError);
-        platform::test_set_atomic_file_failure(platform::atomic_file_test_failure::none);
-        std::filesystem::remove(path);
-    }
+	for (const auto failure : failures)
+	{
+		platform::test_set_atomic_file_failure(failure);
+		CHECK_THROWS(WritePng(surface, path), FileError);
+		platform::test_set_atomic_file_failure(platform::atomic_file_test_failure::none);
+		std::filesystem::remove(path);
+	}
 }
