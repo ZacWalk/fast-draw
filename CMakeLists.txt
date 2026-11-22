@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.24)
 project(fast-draw
     VERSION 1.0.0
     DESCRIPTION "fast-draw - a small vector drawing program"
-    LANGUAGES CXX)
+    LANGUAGES C CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "fast-draw is a Win32 SDK application and only builds on Windows.")
@@ -16,6 +16,15 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Release builds are compiled for speed. The release preset builds RelWithDebInfo, for its PDBs,
+# and CMake's RelWithDebInfo downgrades /O2's implied /Ob2 to /Ob1, which limits inlining to
+# functions the source marked inline. Replaced rather than appended, which would leave both on the
+# command line and make every compile report D9025, and here, before the libraries below are
+# added, so libdesktop and libfiles' C codecs inline fully too - which is why C is enabled here.
+foreach(lang C CXX)
+    string(REPLACE "/Ob1" "/Ob2" CMAKE_${lang}_FLAGS_RELWITHDEBINFO "${CMAKE_${lang}_FLAGS_RELWITHDEBINFO}")
+endforeach()
 
 enable_testing()
 
